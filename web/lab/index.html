@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1117">
+<title>退路 · 实验台</title>
+<meta name="description" content="视频《退路》的实验台：六条贪吃蛇，换个开局，看它们一步步怎么走。">
+<style>/*STYLE*/</style>
+<script>
+// Any script error shows at the bottom of the page, so a blank board on some phone can be read off the screen.
+window.onerror = function (m, src, line, col) {
+  var d = document.getElementById('err') || document.body.appendChild(Object.assign(document.createElement('pre'), { id: 'err' }));
+  d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;margin:0;padding:8px 10px;z-index:9;white-space:pre-wrap;font:12px/1.4 monospace;color:#ffb4b4;background:rgba(40,0,0,.9);border-radius:8px';
+  d.textContent += '出错了：' + m + ' (' + line + ':' + col + ')\n' + navigator.userAgent + '\n';
+};
+</script>
+</head>
+<body data-view="single">
+<header class="top">
+  <div class="brand"><img src="/*TITLE*/" alt="退路" class="title"><span class="sub">实验台</span></div>
+  <nav class="views" aria-label="视图">
+    <button data-view="single" aria-pressed="true">单局</button>
+    <button data-view="race" aria-pressed="false">赛跑</button>
+  </nav>
+</header>
+<main>
+  <section class="stage">
+    <div class="who single-only">
+      <div class="names"><h1 id="name">步步为营</h1><div class="en" id="en"></div></div>
+      <div class="len"><b id="len">2</b><span id="cells">/ 64</span></div>
+    </div>
+    <p class="line single-only" id="line"></p>
+    <div class="race-only racehead"><h1>赛跑 · 同一个开局</h1><span id="racestep" class="num dim"></span></div>
+    <div class="boardwrap single-only"><canvas id="board" aria-label="棋盘，点一下暂停或继续"></canvas><div id="banner" class="banner"></div></div>
+    <div id="racegrid" class="race-only racegrid"></div>
+    <div class="transport">
+      <button class="play" aria-label="暂停" data-state="pause"></button>
+      <button class="step single-only" data-d="-1" aria-label="上一步">‹</button>
+      <canvas id="scrub" class="single-only" aria-label="进度：拖动可以回到任意一步"></canvas>
+      <button class="step single-only" data-d="1" aria-label="下一步">›</button>
+      <button class="speed" aria-label="速度">1×</button>
+    </div>
+    <div class="whybox single-only"><span id="step" class="num dim"></span><span id="why"></span></div>
+    <ol id="results" class="race-only results"></ol>
+  </section>
+  <aside class="panel">
+    <div class="group single-only"><div class="label">选一条蛇</div><div id="chips" class="chips"></div></div>
+    <div class="group">
+      <div class="label">棋盘</div>
+      <div id="sizes" class="seg"></div>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" id="wrap"><span class="knob"></span>穿边</label>
+        <label class="switch"><input type="checkbox" id="custom"><span class="knob"></span>自定义大小</label>
+      </div>
+      <div id="dims" class="dims" hidden>
+        <label><span class="dim">宽</span><input id="cw" type="number" min="3" max="20" inputmode="numeric" aria-label="宽"></label>
+        <span class="dim">×</span>
+        <label><span class="dim">高</span><input id="ch" type="number" min="3" max="20" inputmode="numeric" aria-label="高"></label>
+        <span class="dim small">3–20 格</span>
+      </div>
+    </div>
+    <div class="group">
+      <div class="label">开局</div>
+      <div class="seedrow"><span class="dim">种子</span><input id="seed" type="number" min="1" max="99999" inputmode="numeric" aria-label="种子"><button id="dice">换一个</button></div>
+    </div>
+    <div class="group single-only">
+      <div class="label">画线</div>
+      <label class="switch"><input type="checkbox" id="lines" checked><span class="knob"></span>显示它为什么这么走</label>
+      <ul class="legend"><li><i class="b"></i>去吃的路</li><li><i class="g"></i>退路 · 环线</li><li><i class="w"></i>单行道</li><li><i class="r"></i>回不去</li></ul>
+    </div>
+    <p id="hint" class="hint"></p>
+    <div class="group"><button id="sound" class="soundbtn" aria-pressed="false">声音</button></div>
+    <footer class="about">视频《退路》的实验台，算法和视频里的一样。种子决定食物出现在哪：同一个种子，开局一模一样。<br>空格暂停 · ← → 单步 · 1–6 换蛇 · R 换种子</footer>
+  </aside>
+</main>
+<script>/*ENGINE*/</script>
+<script>/*APP*/</script>
+</body>
+</html>
