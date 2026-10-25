@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+# c/terminal: built programs and terminal recordings
+c/terminal/record
+c/terminal/original
+*.exe
+*.obj
+*.cast
