@@ -1,6 +1,9 @@
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
 #endif
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE /* sys/sysctl.h needs the BSD types that _POSIX_C_SOURCE hides */
+#endif
 #include "snake.h"
 #include <stdlib.h>
 #include <string.h>

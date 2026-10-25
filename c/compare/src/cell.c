@@ -4,8 +4,9 @@
  * The tail variant changes only search occupancy/tree, not real food/body
  * or the exact post-food rollout used for the reachability check. */
 #include "snake.h"
-#include "snake.h"
 #include <limits.h>
+#include <stdlib.h>
+#include <string.h>
 typedef struct{int p,key;} Item;
 static int mode,tile[GB_MAX],scan[GB_MAX],tile_count;
 static int tree[GB_MAX],future_tree[GB_MAX],mask[GB_MAX],future_mask[GB_MAX],future[GB_MAX];
