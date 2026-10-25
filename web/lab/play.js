@@ -1,6 +1,6 @@
 'use strict';
-// The six snakes of the film, run by the project's own engine (web/engine, inlined by build.js),
-// and recorded move by move with why each move was made.
+// The film's six snakes and three more from c/compare, run by the project's own engine
+// (web/engine, inlined by build.js), and recorded move by move with why each move was made.
 
 const SNAKES = [
   { id: 'greedy', name: '莽夫', en: 'GREEDY', line: '只认最短路，从不想吃完以后' },
@@ -9,7 +9,12 @@ const SNAKES = [
   { id: 'hybrid', name: '抄近路', en: 'SHORTCUTS', line: '沿着环线，能跳就跳，只要不越过尾巴' },
   { id: 'c-directed', name: '单行道', en: 'ONE-WAY STREETS', line: '每格只开两个出口，找到路就敢吃' },
   { id: 'tiled-directed', name: '步步为营', en: 'ONE SAFE STEP AT A TIME', line: '吃之前先画好退路图：吃完整条躺在一条环线上' },
+  { id: 'local-cycle', name: '动态回路', full: '局部动态回路', en: 'LOCAL CYCLE REPAIR', line: '沿一条环线走，但环线会改：每一步试着换两处接口，让食物更近', even: true },
+  { id: 'reachability-guard', name: '可达保护', full: 'BFS＋可达性保护', en: 'REACHABILITY GUARD', line: '单行道的规则，吃之前多查一遍：吃完空地有没有被隔开' },
+  { id: 'cell-tree', name: '加权 Cell', full: '加权 Cell＋安全尾段裁剪', en: 'WEIGHTED CELL TREE', line: '2×2 小格连成一棵树，只在树允许的方向上找最短路', even: true },
 ];
+// 动态回路 and 加权 Cell are built on 2×2 squares and walls: both sides even, no wrapping.
+const supports = (id, w, h, wrap) => !SNAKES.find(s => s.id === id).even || (!wrap && w % 2 === 0 && h % 2 === 0);
 
 // Lv0 (莽夫): straight at the food by BFS, no safety check; when the food is out of reach, the
 // neighbour that keeps the most room (the base class's escape()). As in the film, and in web/check.js.
@@ -89,7 +94,30 @@ function probe(id, g) {
     const kind = p.kind === 'bfs' ? (loop ? 'bfs' : 'finish') : first === 'tile-finish' ? 'finish' : first === 'tile-switch' ? 'switch' : p.kind;
     return { kind, route: p.path ? u16(p.path) : null, loop, eats: p.kind === 'bfs' && p.path && p.path.at(-1) === g.food };
   }
+  if (id === 'local-cycle') {   // along its loop; where the head is on a port, a pair of swaps that brings the food closer
+    const d = g.decide(), loop = d.swap || !g._loop ? (g._loop = Uint16Array.from(loopAfter(g, d))) : g._loop;
+    return { kind: d.kind, loop, ahead: d.ahead, saved: d.saved || 0, tried: d.tried || 0, swap: d.swap ? u16(d.swap.source) : null };
+  }
+  if (id === 'reachability-guard') {   // the C rule's route, checked: once eaten, is every empty cell still reached?
+    const d = g.decide(), c = g.mode === 'c-food' || g.mode === 'c-tail' ? g.mode : 'c-disabled';
+    if (d.kind === 'safe') return { kind: body.length + 1 >= g.n ? 'finish' : 'food', route: u16(d.route), back: u16(roadBack(g, afterEat(body, Array.from(d.route)))) };
+    if (d.kind === 'guard') return { kind: 'guard', route: u16(d.route), cut: u16(d.cut), cutOff: d.cutOff, tailBack: d.tailBack, next: d.next, missing: d.missing };
+    if (d.kind === 'spread') return { kind: 'spread', next: d.next, missing: d.missing, from: c, choices: d.options.length };
+    return { kind: d.kind, next: d.next, from: c, checked: !!d.checked, route: u16(d.route), cut: u16(d.cut) };   // relax / relaxed / no-safe
+  }
+  if (id === 'cell-tree') {   // A* inside the tree of squares; first to a cell that eating would cut off
+    const d = g.decide();
+    return { kind: d.kind, route: u16(d.route), food: u16(d.food), target: d.target ?? -1, unreachable: d.unreachable || 0, trimmed: d.trimmed || 0, why: d.why || null };
+  }
   return { kind: '?' };
+}
+// 动态回路's loop as it will be for this move (the swap, if any, made), from the head.
+function loopAfter(g, d) {
+  const s = g.successor.slice();
+  if (d.swap) d.swap.source.forEach((p, k) => { s[p] = d.swap.target[k]; });
+  const out = [];
+  for (let p = g.body[0], i = 0; i < g.n; i++, p = s[p]) out.push(p);
+  return out;
 }
 const manhattan = (g, a, b) => {
   let dx = Math.abs(a % g.w - b % g.w), dy = Math.abs(Math.floor(a / g.w) - Math.floor(b / g.w));
@@ -97,16 +125,19 @@ const manhattan = (g, a, b) => {
   return dx + dy;
 };
 
+const ROADS = new Set(['c-directed', 'tiled-directed', 'reachability-guard', 'cell-tree']);   // the snakes kept to one-way roads
+
 // One game, recorded in slices so the page never stalls. The snake's path is kept as the
 // list of cells its head has been on (the body is always the last `len` of them).
 class Recording {
   constructor(id, w, h, seed, wrap) {
     this.id = id; this.w = w; this.h = h; this.cells = w * h; this.seed = seed; this.wrap = wrap;
     this.maxSteps = Math.max(60000, this.cells * this.cells);   // 循规蹈矩 needs about cells² / 2
+    this.why = []; this.ate = []; this.outcome = null; this.loop = null; this.seen = new Map();
+    if (!supports(id, w, h, wrap)) { this.outcome = 'na'; this.heads = [0, 1]; this.lens = [2]; this.foods = [-1]; this.roads = null; return; }
     this.g = makeGame(id, w, h, seed, wrap);
-    this.heads = [this.g.body[1], this.g.body[0]]; this.lens = [2]; this.foods = [this.g.food]; this.why = []; this.ate = [];
-    this.outcome = null; this.loop = null; this.seen = new Map();
-    this.roads = id === 'c-directed' || id === 'tiled-directed' ? Array.from({ length: this.cells }, (_, p) => this.g.directedNeighbors(p).slice()) : null;
+    this.heads = [this.g.body[1], this.g.body[0]]; this.lens = [2]; this.foods = [this.g.food];
+    this.roads = ROADS.has(id) ? Array.from({ length: this.cells }, (_, p) => this.g.directedNeighbors(p).slice()) : null;
   }
   get steps() { return this.lens.length - 1; }
   body(k) { const L = this.lens[k], out = new Array(L); for (let j = 0; j < L; j++) out[j] = this.heads[k + 1 - j]; return out; }

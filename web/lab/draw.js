@@ -195,7 +195,7 @@ function drawPath(ctx, B, cells, color, { width = 5, alpha = 0.9, p = 1 } = {}) 
 }
 function drawLoop(ctx, B, loop, { alpha = 1, width = 3, color = C.gold } = {}) {
   if (!loop || loop.length < 2 || alpha <= 0) return;
-  glowFolded(ctx, B, B.unwrap(loop.concat(loop[0])), color, width, { alpha: 0.85 * alpha, halos: [[4.5, 0.1], [2.2, 0.18]] });
+  glowFolded(ctx, B, B.unwrap([...loop, loop[0]]), color, width, { alpha: 0.85 * alpha, halos: [[4.5, 0.1], [2.2, 0.18]] });
 }
 function cross(ctx, x, y, r, color, alpha, width = 5) {
   if (alpha <= 0) return;
@@ -221,6 +221,22 @@ function drawRoads(ctx, B, roads, alpha = 0.5) {
     chevron(x0 + ux * k, y0 + uy * k, ux, uy); chevron(x1 - ux * k, y1 - uy * k, ux, uy);
   }));
   ctx.stroke(); ctx.restore();
+}
+// 加权 Cell's tree of 2×2 squares: walked from the tail, each square the body enters is linked
+// to the one it came from. Faint outlines of those squares, and the links between their centres.
+function drawSquareTree(ctx, B, body, length, alpha = 0.5) {
+  if (alpha <= 0 || length < 1) return;
+  const sw = B.w >> 1, centre = s => [((s % sw) * 2 + 1) * CELL, (Math.floor(s / sw) * 2 + 1) * CELL], seen = new Set(), links = [];
+  let parent = -1;
+  for (let i = length - 1; i >= 0; i--) {
+    const c = body[i], s = (Math.floor(c / B.w) >> 1) * sw + ((c % B.w) >> 1);
+    if (!seen.has(s)) { seen.add(s); if (parent >= 0) links.push([centre(parent), centre(s)]); }
+    parent = s;
+  }
+  ctx.save(); ctx.strokeStyle = rgba(C.goldDim, 0.35 * alpha); ctx.lineWidth = 2;
+  for (const s of seen) { const [x, y] = centre(s); ctx.strokeRect(x - CELL + 6, y - CELL + 6, 2 * CELL - 12, 2 * CELL - 12); }
+  ctx.restore();
+  for (const [a, b] of links) glowStroke(ctx, [a, b], C.goldDim, 3, { alpha: 0.8 * alpha, halos: [[3, 0.08]] });
 }
 function drawFullFlash(ctx, B, u) {   // a gold frame bursts off a board that just filled
   if (u < 0 || u > 1) return;

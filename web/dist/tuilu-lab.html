@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0f1117">
 <title>退路 · 实验台</title>
-<meta name="description" content="视频《退路》的实验台：六条贪吃蛇，换个开局，看它们一步步怎么走。">
+<meta name="description" content="视频《退路》的实验台：九条贪吃蛇，换个开局，看它们一步步怎么走。">
 <style>:root {
   --bg: #0f1117; --bg2: #161925; --board: #1a1e29; --edge: #272d3d; --text: #f1efe9; --dim: #8a8fa6;
   --gold: #f2c14e; --gold-dim: #c8a76b; --blue: #6aa8ff; --red: #ff6b78; --wire: #8ea6d8; --green: #86ecc2;
@@ -84,6 +84,8 @@ body[data-view="race"] .transport { justify-content: center; gap: 14px; }
 .chip span { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .chip[aria-pressed="true"] { border-color: rgba(242,193,78,0.65); background: rgba(242,193,78,0.08); }
 .chip[aria-pressed="true"] b { color: var(--gold); }
+.chip.na { opacity: 0.45; }
+.card.na .status { color: var(--dim); } .card.na canvas { opacity: 0.35; }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .seg button { padding: 6px 12px; border-radius: 10px; border: 1px solid var(--edge); background: rgba(255,255,255,0.025); font-size: 14px; font-variant-numeric: tabular-nums; }
 .seg button[aria-pressed="true"] { border-color: rgba(242,193,78,0.65); color: var(--gold); background: rgba(242,193,78,0.08); }
@@ -189,10 +191,10 @@ window.onerror = function (m, src, line, col) {
         <label class="switch"><input type="checkbox" id="custom"><span class="knob"></span>自定义大小</label>
       </div>
       <div id="dims" class="dims" hidden>
-        <label><span class="dim">宽</span><input id="cw" type="number" min="3" max="20" inputmode="numeric" aria-label="宽"></label>
+        <label><span class="dim">宽</span><input id="cw" type="number" min="3" max="30" inputmode="numeric" aria-label="宽"></label>
         <span class="dim">×</span>
-        <label><span class="dim">高</span><input id="ch" type="number" min="3" max="20" inputmode="numeric" aria-label="高"></label>
-        <span class="dim small">3–20 格</span>
+        <label><span class="dim">高</span><input id="ch" type="number" min="3" max="30" inputmode="numeric" aria-label="高"></label>
+        <span class="dim small">3–30 格</span>
       </div>
     </div>
     <div class="group">
@@ -206,7 +208,7 @@ window.onerror = function (m, src, line, col) {
     </div>
     <p id="hint" class="hint"></p>
     <div class="group"><button id="sound" class="soundbtn" aria-pressed="false">声音</button></div>
-    <footer class="about">视频《退路》的实验台，算法和视频里的一样。种子决定食物出现在哪：同一个种子，开局一模一样。<br>空格暂停 · ← → 单步 · 1–6 换蛇 · R 换种子</footer>
+    <footer class="about">视频《退路》的实验台。前六条蛇和视频里的算法一样，后三条和仓库里的 C 对照程序（c/compare）一步不差。种子决定食物出现在哪：同一个种子，开局一模一样。<br>空格暂停 · ← → 单步 · 1–9 换蛇 · R 换种子</footer>
   </aside>
 </main>
 <script>// web/engine/snake.js
@@ -509,6 +511,9 @@ window.onerror = function (m, src, line, col) {
     if(strategy==='tiled-simple'){const simple=typeof module!=='undefined'&&module.exports?require('./tiled-simple.js'):root.TiledSimple;return new simple.SimpleTiledSnake(w,h,seed,wrap);}
     if(strategy==='tiled-directed'){const tiled=typeof module!=='undefined'&&module.exports?require('./tiled-directed.js'):root.TiledDirected;return new tiled.TiledDirectedSnake(w,h,seed,wrap);}
     if(strategy==='c-directed'){const c=typeof module!=='undefined'&&module.exports?require('./c-directed.js'):root.CDirected;return new c.CDirectedSnake(w,h,seed,wrap);}
+    if(strategy==='local-cycle'){const local=typeof module!=='undefined'&&module.exports?require('./local-cycle.js'):root.LocalCycle;return new local.LocalCycleSnake(w,h,seed,wrap);}
+    if(strategy==='reachability-guard'){const guard=typeof module!=='undefined'&&module.exports?require('./reachability-guard.js'):root.ReachabilityGuard;return new guard.GuardSnake(w,h,seed,wrap);}
+    if(strategy==='cell-tree'){const cell=typeof module!=='undefined'&&module.exports?require('./cell-tree.js'):root.CellTree;return new cell.CellTreeSnake(w,h,seed,wrap);}
     if(strategy==='adaptive'||strategy==='adaptive-ring'){const adaptive=typeof module!=='undefined'&&module.exports?require('./adaptive.js'):root.AdaptiveSnake;return new adaptive.AdaptiveSnake(w,h,seed,wrap,strategy==='adaptive');}
     if(['bfs-handoff','bfs-always','bfs-always-matched'].includes(strategy)){const handoff=typeof module!=='undefined'&&module.exports?require('./bfs-handoff.js'):root.BfsHandoff;return new handoff.BfsHandoffSnake(w,h,seed,wrap,strategy==='bfs-handoff'?options.switchAt??.65:1,strategy==='bfs-always-matched'?options.switchAt??.65:1);}
     return new HybridSnake(w,h,seed,wrap,strategy==='cycle'?0:.65,strategy!=='hybrid-greedy');
@@ -1116,6 +1121,352 @@ window.onerror = function (m, src, line, col) {
   }
  }
  const api={CDirectedSnake};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.CDirected=api;
+})(typeof globalThis!=='undefined'?globalThis:this);
+// web/engine/rollout.js
+(function(root){
+ 'use strict';
+ // Two helpers shared by 可达保护 and 加权 Cell, translated from c/compare/src/game.c.
+ // project(): the body after the head walks `path` (head first), exactly as the game would
+ // move it, tail cells freeing as it goes. Null if a move is illegal or the path runs on past
+ // the food. No food is drawn: the board after eating is looked at without the next apple.
+ function project(g,path){
+  const mask=new Uint8Array(g.n),history=g.body.slice().reverse();let first=0,length=g.body.length;
+  for(const p of g.body)mask[p]=1;
+  for(let i=1;i<path.length;i++){
+   const p=path[i],grow=p===g.food;
+   if(!g.neighbors(history.at(-1)).includes(p))return null;
+   if(!grow)mask[history[first++]]=0;else length++;
+   if(mask[p])return null;
+   history.push(p);mask[p]=1;
+   if(grow&&i+1<path.length)return null;
+  }
+  return {body:history.slice(-length).reverse(),mask};
+ }
+ // trim(): free the tail cells that will have left before the head could reach them. A body cell
+ // i places from the head leaves in length − i moves; if that is no more than its Manhattan
+ // distance from the head, the head cannot get there first. Counted from the tail, up to the
+ // first cell that might still be there. Returns how many cells were freed in `mask`.
+ function trim(g,body,length,mask){
+  const head=body[0],hx=head%g.w,hy=Math.floor(head/g.w);let removed=0;
+  for(let i=length-1;i>0;i--){
+   const p=body[i],lower=Math.abs(hx-p%g.w)+Math.abs(hy-Math.floor(p/g.w));
+   if(length-i>lower)break;
+   mask[p]=0;removed++;
+  }
+  return removed;
+ }
+ const api={project,trim};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Rollout=api;
+})(typeof globalThis!=='undefined'?globalThis:this);
+// web/engine/reachability-guard.js
+(function(root){
+ 'use strict';
+ const node=typeof module!=='undefined'&&module.exports;
+ const c=node?require('./c-directed.js'):root.CDirected,roll=node?require('./rollout.js'):root.Rollout;
+ // 可达保护: the C rule (c-directed.js) with one more test, translated from c/compare/src/bfs.c.
+ // Before following a road to the food, eat in imagination and flood the roads from the new
+ // head: every empty cell, and the tail, must still be reached. If not (or when the C rule is
+ // only following its tail), take whichever exit leaves the fewest empty cells cut off, the
+ // tail furthest away on a tie. After 2 × cells moves without a meal the test is dropped
+ // until the next one, so the guard cannot hold the snake in a loop for ever.
+ class GuardSnake extends c.CDirectedSnake{
+  constructor(w=9,h=9,seed=1,wrap=false){
+   super(w,h,seed,wrap);this.roads=Array.from({length:this.n},(_,p)=>this.directedNeighbors(p));
+   this.sinceFood=0;this.relaxed=false;this._decision=null;this._decidedAt=-1;
+   this.checks=0;this.risky=0;this.overrides=0;this.relaxations=0;this.noSafe=0;
+  }
+  // From the head along the roads through cells not in `mask`: how many empty cells, how many
+  // moves to the tail (-1 if none), and which cells were reached.
+  flood(mask,head,tail){
+   const seen=new Uint8Array(this.n),distance=new Int32Array(this.n),queue=[head];seen[head]=1;let empty=0,toTail=-1;
+   for(let i=0;i<queue.length;i++){const p=queue[i];for(const q of this.roads[p]){
+    if(q===tail&&toTail<0)toTail=distance[p]+1;
+    if(mask[q]||seen[q])continue;seen[q]=1;distance[q]=distance[p]+1;queue.push(q);empty++;
+   }}
+   return {empty,tail:toTail,seen};
+  }
+  // This move, worked out once per step without changing anything.
+  decide(){
+   if(this._decision&&this._decidedAt===this.steps)return this._decision;
+   const n=this.n,head=this.body[0],base=this.nextCell(),d={next:base,kind:'base',base};
+   this._decidedAt=this.steps;this._decision=d;
+   if(this.relaxed){d.kind='relaxed';return d;}
+   if(this.sinceFood>=2*n){d.kind='relax';d.relax=true;return d;}
+   const plan=this.stackLen>=0?this.bufferedPath():[];
+   if(plan.length&&plan.at(-1)===this.food){
+    d.checked=true;d.route=[head,...plan];
+    const r=roll.project(this,d.route);let safe=!!r;
+    if(r&&r.body.length<n){const f=this.flood(r.mask,r.body[0],r.body.at(-1));d.cutOff=n-r.body.length-f.empty;d.tailBack=f.tail>=0;safe=d.cutOff===0&&d.tailBack;
+     if(!safe){d.ghost=r.body;d.cut=[];for(let p=0;p<n;p++)if(!r.mask[p]&&!f.seen[p])d.cut.push(p);}}
+    if(safe){d.kind='safe';return d;}
+   }
+   const out=this.roads[head],candidates=[base,...out.filter(q=>q!==base)];let best=-1,missingBest=n+1,tailBest=-1;
+   d.options=[];
+   for(const q of candidates){
+    if(!out.includes(q))continue;const r=roll.project(this,[head,q]);if(!r)continue;
+    const f=this.flood(r.mask,r.body[0],r.body.at(-1)),missing=n-r.body.length-f.empty;
+    d.options.push({cell:q,missing,tail:f.tail});
+    if(r.body.length<n&&f.tail<0)continue;if(q===this.food&&missing>0)continue;
+    if(missing<missingBest||(missing===missingBest&&f.tail>tailBest)){best=q;missingBest=missing;tailBest=f.tail;}
+   }
+   if(best<0){d.kind='no-safe';return d;}
+   // As in C, the choice replaces the remembered route even when it is the same move.
+   Object.assign(d,{next:best,kind:d.checked?'guard':'spread',override:true,missing:missingBest});
+   return d;
+  }
+  plan(){return this.decide().next;}
+  stateKey(){return [...super.stateKey(),this.relaxed,Math.min(this.sinceFood,2*this.n)];}
+  tick(){
+   if(this.dead||this.food===-1)return false;
+   const d=this.decide();this._decision=null;
+   if(d.checked)this.checks++;if(d.checked&&d.kind!=='safe')this.risky++;if(d.kind==='no-safe')this.noSafe++;
+   if(d.relax){this.relaxed=true;this.relaxations++;}
+   if(d.override){if(d.next!==d.base)this.overrides++;this.stackLen=0;this.stack[0]=d.next;this.aiFlag=true;}
+   const grew=d.next===this.food,ok=super.tick();
+   if(ok&&grew){this.relaxed=false;this.sinceFood=0;}else this.sinceFood++;
+   return ok;
+  }
+ }
+ const api={GuardSnake};if(node)module.exports=api;else root.ReachabilityGuard=api;
+})(typeof globalThis!=='undefined'?globalThis:this);
+// web/engine/local-cycle.js
+(function(root){
+ 'use strict';
+ const node=typeof module!=='undefined'&&module.exports;
+ const base=node?require('./snake.js'):root.TailSnake,tiles=node?require('./tiled-directed.js'):root.TiledDirected;
+ // 动态回路 (局部动态回路), translated from c/compare/src/cycle.c. The snake always follows one
+ // loop through every cell, but the loop is not fixed: where the head stands on a port between
+ // two 2×2 squares, try swapping that port and one more nearby (within the 3×3 squares around
+ // it) at once. Two swaps of a single loop can leave a single loop; keep the pair that does and
+ // brings the food closest along it. Cells the body is on are never re-routed, so the body stays
+ // on the loop and the way back to the tail is always the loop itself.
+
+ // The starting loop: up and down the columns, home along the top row (c/compare's gb_cycle_build).
+ function fullCycle(w,h){
+  const n=w*h,c=[];
+  for(let x=0;x<w;x++){if(x%2===0)for(let y=1;y<h;y++)c.push(y*w+x);else for(let y=h-1;y>=1;y--)c.push(y*w+x);}
+  for(let x=w-1;x>=0;x--)c.push(x);
+  let zero=c.indexOf(0);if(c[(zero+1)%n]!==1)c.reverse();
+  zero=c.indexOf(0);return c.slice(zero).concat(c.slice(0,zero));
+ }
+ class LocalCycleSnake extends base.Snake{
+  constructor(w=8,h=8,seed=1,wrap=false){
+   super(w,h,seed,wrap);
+   if(wrap||w%2||h%2)throw Error('动态回路需要宽、高都是偶数，不穿边');
+   const n=this.n,cycle=fullCycle(w,h);this.network=tiles.buildTiles(w,h,false);
+   this.successor=new Int32Array(n);cycle.forEach((p,i)=>{this.successor[p]=cycle[(i+1)%n];});
+   this.order=new Int32Array(n);this.rank();
+   const ports=this.network.ports;this.cellPort=new Int32Array(n).fill(-1);
+   for(const p of ports){this.cellPort[p.u]=this.cellPort[p.x]=p.id;}
+   const square=p=>[Math.floor(p%w/2),Math.floor(Math.floor(p/w)/2)];
+   // The same bounded neighbourhood on every board: other ports within the 3×3 squares, at most 17.
+   this.partners=ports.map(p=>{const[tx,ty]=square(p.u),out=[];for(const q of ports){if(q.id===p.id)continue;const[x,y]=square(q.u);if(Math.abs(x-tx)<=1&&Math.abs(y-ty)<=1&&out.length<17)out.push(q.id);}return out;});
+   this._decision=null;this._decidedAt=-1;this.proposals=0;this.accepted=0;this.saved=0;this.version=0;
+  }
+  // Number every cell by its place along the loop, from the head.
+  rank(){let p=this.body[0];for(let i=0;i<this.n;i++){this.order[p]=i;p=this.successor[p];}if(p!==this.body[0])throw Error('local cycle lost');}
+  distance(a,b){return (this.order[b]-this.order[a]+this.n)%this.n;}
+  loop(){const out=new Array(this.n);let p=this.body[0];for(let i=0;i<this.n;i++){out[i]=p;p=this.successor[p];}return out;}
+  // A port's two cells swap their exits: the loop runs across to the next square, or back.
+  toggle(id,on){
+   const p=this.network.ports[id],head=this.body[0];
+   if((on[p.u]&&p.u!==head)||(on[p.x]&&p.x!==head))return null;
+   const s=this.successor;
+   if(s[p.u]===p.v&&s[p.x]===p.y)return {source:[p.u,p.x],target:[p.y,p.v]};
+   if(s[p.u]===p.y&&s[p.x]===p.v)return {source:[p.u,p.x],target:[p.v,p.y]};
+   return null;
+  }
+  // Walk the loop with four exits changed: if it is still one loop through every cell, how far
+  // the food is along it (-1 if it falls apart).
+  candidate(source,target){
+   for(let i=0;i<4;i++)for(let j=0;j<i;j++)if(source[i]===source[j])return -1;
+   const n=this.n,head=this.body[0];let p=head,total=0,visited=0,food=-1;
+   for(let it=0;it<5;it++){
+    let chosen=-1,nearest=n;
+    for(let k=0;k<4;k++){const d=this.distance(p,source[k]);if(d<nearest){chosen=k;nearest=d;}}
+    const fd=this.distance(p,this.food);if(food<0&&fd<=nearest)food=total+fd;
+    total+=nearest;
+    if(visited&(1<<chosen))return source[chosen]===head&&total===n&&visited===15?food:-1;
+    visited|=1<<chosen;total++;p=target[chosen];if(total>n)return -1;
+   }
+   return -1;
+  }
+  decide(){
+   if(this._decision&&this._decidedAt===this.steps)return this._decision;
+   const head=this.body[0],ahead=this.distance(head,this.food),d={ahead,kind:'ring',next:this.successor[head]};
+   this._decision=d;this._decidedAt=this.steps;
+   const on=new Uint8Array(this.n);for(const p of this.body)on[p]=1;
+   const first=this.cellPort[head],a=first>=0?this.toggle(first,on):null;
+   if(!a)return d;
+   d.kind='tried';d.tried=0;let best=ahead,swap=null;
+   for(const second of this.partners[first]){
+    const b=this.toggle(second,on);if(!b)continue;d.tried++;
+    const source=[...a.source,...b.source],target=[...a.target,...b.target],f=this.candidate(source,target);
+    if(f>0&&f<best){best=f;swap={source,target,ports:[first,second]};}
+   }
+   if(swap){d.kind='swap';d.swap=swap;d.ahead=best;d.saved=ahead-best;const at=swap.source.indexOf(head);d.next=at>=0?swap.target[at]:this.successor[head];}
+   return d;
+  }
+  plan(){return this.decide().next;}
+  // The loop is part of the state (for spotting a game that goes round for ever); kept as a string, remade only when it changes.
+  stateKey(){if(this._keyAt!==this.version){this._key=this.successor.join(',');this._keyAt=this.version;}return this._key;}
+  tick(){
+   if(this.dead||this.food===-1)return false;
+   const d=this.decide();this._decision=null;this.proposals+=d.tried||0;
+   if(d.swap){d.swap.source.forEach((p,k)=>{this.successor[p]=d.swap.target[k];});this.accepted++;this.saved+=d.saved;this.version++;this.rank();}
+   const head=this.body[0],next=this.successor[head],grow=next===this.food;
+   if(!this.neighbors(head).includes(next)||(grow?this.body:this.body.slice(0,-1)).includes(next)){this.dead=true;return false;}
+   this.body.unshift(next);if(grow){this.eaten++;this.spawn();}else this.body.pop();
+   this.steps++;return true;
+  }
+ }
+ const api={LocalCycleSnake,fullCycle};if(node)module.exports=api;else root.LocalCycle=api;
+})(typeof globalThis!=='undefined'?globalThis:this);
+// web/engine/cell-tree.js
+(function(root){
+ 'use strict';
+ const node=typeof module!=='undefined'&&module.exports;
+ const base=node?require('./snake.js'):root.TailSnake,roll=node?require('./rollout.js'):root.Rollout;
+ // 加权 Cell (加权 Cell＋安全尾段裁剪), translated from c/compare/src/cell.c: a port of
+ // twanvl/snake's CellTreeAgent (github.com/twanvl/snake, ee180ede) with one change of this
+ // project's, the tail trim. Not an original cell-tree algorithm. The source's licence:
+ //
+ //   MIT License. Copyright (c) 2020 Twan van Laarhoven
+ //   Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+ //   and associated documentation files (the "Software"), to deal in the Software without
+ //   restriction, including without limitation the rights to use, copy, modify, merge, publish,
+ //   distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
+ //   Software is furnished to do so, subject to the following conditions:
+ //   The above copyright notice and this permission notice shall be included in all copies or
+ //   substantial portions of the Software.
+ //   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+ //   BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ //   NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ //   DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ //   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ //
+ // The board is cut into 2×2 squares. Walked from the tail, the body enters squares one after
+ // another; each square's parent is the one the body came from. The head may move within its
+ // square, into a square the body is not on, or back to its square's parent, and only along the
+ // one-way roads (the C rule's). Kept to that, the body's squares form a tree, and a loop round
+ // a tree of squares through all their cells always exists: the snake cannot shut itself in.
+ // Within those moves, A* to the food, moves that leave the tree cost more. Before following the
+ // path, eat in imagination: if some empty cell could then not be reached, head first for the
+ // nearest such cell. Tail cells that will have left before the head could reach them count as
+ // free while searching (rollout.js trim()); the real body is used for everything else.
+ const DOWN=[0,1],UP=[0,-1],LEFT=[-1,0],RIGHT=[1,0],DIRS=[DOWN,UP,LEFT,RIGHT];   // the source's U, D, L, R, reflected
+ const MAX=0x7fffffff;
+ class CellTreeSnake extends base.Snake{
+  constructor(w=8,h=8,seed=1,wrap=false){
+   super(w,h,seed,wrap);
+   if(wrap||w%2||h%2)throw Error('加权 Cell 需要宽、高都是偶数，不穿边');
+   const n=this.n;this.square=new Int32Array(n);this.scan=new Int32Array(n);this.squares=n/4;
+   for(let p=0;p<n;p++){const x=p%w,y=Math.floor(p/w);this.square[p]=(y>>1)*(w>>1)+(x>>1);this.scan[p]=(h-1-y)*w+x;}
+   // The one-way roads of the C rule on an even board (as c-directed.js): first up or down, then left or right.
+   this.roads=Array.from({length:n},(_,p)=>{const x=p%w,y=Math.floor(p/w);return [this.offset(p,0,x%2?1:-1),this.offset(p,y%2?-1:1,0)].filter(q=>q>=0);});
+   this.cache=[];this.cacheCount=0;this._decision=null;this._decidedAt=-1;
+   this.searches=0;this.detours=0;this.cachedSteps=0;this.noPath=0;this.trimmed=0;
+   // A binary heap with the same order on equal keys as the source's std::priority_queue (MSVC),
+   // so that ties break the same way and the games come out move for move the same.
+   this.heapP=new Int32Array(4*n);this.heapK=new Int32Array(4*n);this.heapN=0;
+   this.dist=new Int32Array(n);this.father=new Int32Array(n);
+  }
+  directedNeighbors(p){return this.roads[p];}
+  push(p,key){
+   const P=this.heapP,K=this.heapK;let at=this.heapN++;
+   while(at){const up=(at-1)>>1;if(K[up]<=key)break;P[at]=P[up];K[at]=K[up];at=up;}
+   P[at]=p;K[at]=key;
+  }
+  pop(){
+   const P=this.heapP,K=this.heapK,out=P[0],n=--this.heapN,vp=P[n],vk=K[n];let at=0;
+   if(!n)return out;
+   while(2*at+2<n){let child=2*at+2;if(K[child]>K[child-1])child--;P[at]=P[child];K[at]=K[child];at=child;}
+   if(2*at+1<n){const child=2*at+1;P[at]=P[child];K[at]=K[child];at=child;}
+   while(at){const up=(at-1)>>1;if(K[up]<=vk)break;P[at]=P[up];K[at]=K[up];at=up;}
+   P[at]=vp;K[at]=vk;return out;
+  }
+  // Each square's parent along the body (from the tail): -1 not on the body, -2 the tail's square.
+  parents(body,length){
+   const out=new Int32Array(this.squares).fill(-1);let parent=-2;
+   for(let i=length-1;i>=0;i--){const s=this.square[body[i]];if(out[s]===-1)out[s]=parent;parent=s;}
+   return out;
+  }
+  allowed(tree,p,q){
+   if(!this.roads[p].includes(q))return false;
+   const a=this.square[p],b=this.square[q];return a===b||tree[b]===-1||tree[a]===b;
+  }
+  manhattan(a,b){return Math.abs(a%this.w-b%this.w)+Math.abs(Math.floor(a/this.w)-Math.floor(b/this.w));}
+  // A* from the head to the food over allowed moves; a move costs 1000, plus 499 within a square
+  // the tree does not lead out of, plus 2400 into another square than the parent. Returns the path
+  // backwards (food first, head left out), or null.
+  astar(mask,tree){
+   this.searches++;const n=this.n,dist=this.dist,father=this.father,head=this.body[0],goal=this.food,sq=this.square;
+   dist.fill(MAX);father.fill(-1);this.heapN=0;dist[head]=0;this.push(head,1000*this.manhattan(head,goal));
+   while(this.heapN){
+    const p=this.pop();if(p===goal)break;
+    for(const [dx,dy] of DIRS){
+     const q=this.offset(p,dx,dy);if(q<0||mask[q]||!this.allowed(tree,p,q))continue;
+     const penalty=sq[q]===tree[sq[p]]?0:sq[p]===sq[q]?499:2400,d=dist[p]+1000+penalty;
+     if(d<dist[q]){dist[q]=d;father[q]=p;this.push(q,d+1000*this.manhattan(q,goal));}
+    }
+   }
+   if(dist[goal]===MAX)return null;
+   const back=[];for(let p=goal;p!==head;p=father[p]){if(back.length>=n||p<0)throw Error('Cell A* parent');back.push(p);}
+   return back;
+  }
+  // This move, worked out once per step without changing anything: the remembered path is
+  // handed on as (cache, count), never edited in place.
+  decide(){
+   if(this._decision&&this._decidedAt===this.steps)return this._decision;
+   const n=this.n,body=this.body,head=body[0],L=body.length,occupied=new Uint8Array(n);for(const p of body)occupied[p]=1;
+   let cache=this.cache,count=this.cacheCount;
+   // d.route: where it is going (the remembered path from here, or the detour).
+   const done=d=>{d.cache=cache;d.count=count;if(!d.route&&d.next>=0)d.route=[head,d.next,...cache.slice(0,count).reverse()];this._decision=d;this._decidedAt=this.steps;return d;};
+   const mask=occupied.slice(),removed=roll.trim(this,body,L,mask),tree=this.parents(body,L-removed);
+   const fallback=kind=>{
+    if(count)return done({next:cache[--count],kind:'cached',why:kind});
+    for(const [dx,dy] of DIRS){const q=this.offset(head,dx,dy);if(q>=0&&!occupied[q]&&this.allowed(tree,head,q))return done({next:q,kind:'step',why:kind});}
+    return done({next:-1,kind:'stuck',why:kind});
+   };
+   let back=this.astar(mask,tree),future,futureMask,found=!!back;
+   if(!back){
+    if(count)return fallback('no-path');
+    // The source's own probe: as if the head were already on the food (looked at, never moved).
+    back=[this.food];future=[this.food,...body];futureMask=occupied.slice();futureMask[this.food]=1;
+   }else{
+    const r=roll.project(this,[head,...back.slice().reverse()]);
+    if(!r)return fallback('rejected');
+    future=r.body;futureMask=r.mask;
+   }
+   // After eating: which empty cells can the new head still reach, by allowed moves?
+   const futureTree=this.parents(future,future.length),seen=new Uint8Array(n),queue=[future[0]];seen[future[0]]=1;
+   for(let i=0;i<queue.length;i++){const p=queue[i];for(const [dx,dy] of DIRS){const q=this.offset(p,dx,dy);if(q<0||seen[q]||futureMask[q]||!this.allowed(futureTree,p,q))continue;seen[q]=1;queue.push(q);}}
+   let unreachable=0,nearest=-1,best=MAX;
+   for(let i=0;i<n;i++){const p=this.scan[i];if(!futureMask[p]&&!seen[p]){unreachable++;if(this.dist[p]<best){nearest=p;best=this.dist[p];}}}
+   const path=found?[head,...back.slice().reverse()]:null;
+   if(unreachable){
+    if(nearest>=0&&nearest!==head){
+     let p=nearest,guard=0;while(this.father[p]!==head){p=this.father[p];if(p<0||++guard>=n)throw Error('Cell detour parent');}
+     const toward=[nearest];for(let q=nearest;this.father[q]!==-1&&q!==head;q=this.father[q])toward.push(this.father[q]);
+     cache=[];count=0;return done({next:p,kind:'detour',unreachable,target:nearest,food:path,route:toward.reverse()});
+    }
+    if(count)return done({next:cache[--count],kind:'cached',why:'unreachable',unreachable,food:path});
+   }
+   cache=back.slice();count=back.length;
+   return done({next:cache[--count],kind:found?'path':'probe',food:path,trimmed:removed});
+  }
+  plan(){return this.decide().next;}
+  stateKey(){return this.cache.slice(0,this.cacheCount);}
+  tick(){
+   if(this.dead||this.food===-1)return false;
+   const d=this.decide();this._decision=null;
+   this.cache=d.cache;this.cacheCount=d.count;if(d.kind==='detour')this.detours++;if(d.kind==='cached')this.cachedSteps++;if(d.why==='no-path')this.noPath++;this.trimmed+=d.trimmed||0;
+   const head=this.body[0],next=d.next,grow=next===this.food;
+   if(next<0||!this.neighbors(head).includes(next)||(grow?this.body:this.body.slice(0,-1)).includes(next)){this.dead=true;return false;}
+   this.body.unshift(next);if(grow){this.eaten++;this.spawn();}else this.body.pop();
+   this.steps++;return true;
+  }
+ }
+ const api={CellTreeSnake};if(node)module.exports=api;else root.CellTree=api;
 })(typeof globalThis!=='undefined'?globalThis:this);</script>
 <script>(function () {
 'use strict';
@@ -1316,7 +1667,7 @@ function drawPath(ctx, B, cells, color, { width = 5, alpha = 0.9, p = 1 } = {}) 
 }
 function drawLoop(ctx, B, loop, { alpha = 1, width = 3, color = C.gold } = {}) {
   if (!loop || loop.length < 2 || alpha <= 0) return;
-  glowFolded(ctx, B, B.unwrap(loop.concat(loop[0])), color, width, { alpha: 0.85 * alpha, halos: [[4.5, 0.1], [2.2, 0.18]] });
+  glowFolded(ctx, B, B.unwrap([...loop, loop[0]]), color, width, { alpha: 0.85 * alpha, halos: [[4.5, 0.1], [2.2, 0.18]] });
 }
 function cross(ctx, x, y, r, color, alpha, width = 5) {
   if (alpha <= 0) return;
@@ -1343,6 +1694,22 @@ function drawRoads(ctx, B, roads, alpha = 0.5) {
   }));
   ctx.stroke(); ctx.restore();
 }
+// 加权 Cell's tree of 2×2 squares: walked from the tail, each square the body enters is linked
+// to the one it came from. Faint outlines of those squares, and the links between their centres.
+function drawSquareTree(ctx, B, body, length, alpha = 0.5) {
+  if (alpha <= 0 || length < 1) return;
+  const sw = B.w >> 1, centre = s => [((s % sw) * 2 + 1) * CELL, (Math.floor(s / sw) * 2 + 1) * CELL], seen = new Set(), links = [];
+  let parent = -1;
+  for (let i = length - 1; i >= 0; i--) {
+    const c = body[i], s = (Math.floor(c / B.w) >> 1) * sw + ((c % B.w) >> 1);
+    if (!seen.has(s)) { seen.add(s); if (parent >= 0) links.push([centre(parent), centre(s)]); }
+    parent = s;
+  }
+  ctx.save(); ctx.strokeStyle = rgba(C.goldDim, 0.35 * alpha); ctx.lineWidth = 2;
+  for (const s of seen) { const [x, y] = centre(s); ctx.strokeRect(x - CELL + 6, y - CELL + 6, 2 * CELL - 12, 2 * CELL - 12); }
+  ctx.restore();
+  for (const [a, b] of links) glowStroke(ctx, [a, b], C.goldDim, 3, { alpha: 0.8 * alpha, halos: [[3, 0.08]] });
+}
 function drawFullFlash(ctx, B, u) {   // a gold frame bursts off a board that just filled
   if (u < 0 || u > 1) return;
   ctx.save(); ctx.strokeStyle = rgba(C.gold, 0.8 * (1 - u)); ctx.lineWidth = 3 + 10 * (1 - u);
@@ -1351,8 +1718,8 @@ function drawFullFlash(ctx, B, u) {   // a gold frame bursts off a board that ju
 }
 
 // web/lab/play.js
-// The six snakes of the film, run by the project's own engine (web/engine, inlined by build.js),
-// and recorded move by move with why each move was made.
+// The film's six snakes and three more from c/compare, run by the project's own engine
+// (web/engine, inlined by build.js), and recorded move by move with why each move was made.
 
 const SNAKES = [
   { id: 'greedy', name: '莽夫', en: 'GREEDY', line: '只认最短路，从不想吃完以后' },
@@ -1361,7 +1728,12 @@ const SNAKES = [
   { id: 'hybrid', name: '抄近路', en: 'SHORTCUTS', line: '沿着环线，能跳就跳，只要不越过尾巴' },
   { id: 'c-directed', name: '单行道', en: 'ONE-WAY STREETS', line: '每格只开两个出口，找到路就敢吃' },
   { id: 'tiled-directed', name: '步步为营', en: 'ONE SAFE STEP AT A TIME', line: '吃之前先画好退路图：吃完整条躺在一条环线上' },
+  { id: 'local-cycle', name: '动态回路', full: '局部动态回路', en: 'LOCAL CYCLE REPAIR', line: '沿一条环线走，但环线会改：每一步试着换两处接口，让食物更近', even: true },
+  { id: 'reachability-guard', name: '可达保护', full: 'BFS＋可达性保护', en: 'REACHABILITY GUARD', line: '单行道的规则，吃之前多查一遍：吃完空地有没有被隔开' },
+  { id: 'cell-tree', name: '加权 Cell', full: '加权 Cell＋安全尾段裁剪', en: 'WEIGHTED CELL TREE', line: '2×2 小格连成一棵树，只在树允许的方向上找最短路', even: true },
 ];
+// 动态回路 and 加权 Cell are built on 2×2 squares and walls: both sides even, no wrapping.
+const supports = (id, w, h, wrap) => !SNAKES.find(s => s.id === id).even || (!wrap && w % 2 === 0 && h % 2 === 0);
 
 // Lv0 (莽夫): straight at the food by BFS, no safety check; when the food is out of reach, the
 // neighbour that keeps the most room (the base class's escape()). As in the film, and in web/check.js.
@@ -1441,7 +1813,30 @@ function probe(id, g) {
     const kind = p.kind === 'bfs' ? (loop ? 'bfs' : 'finish') : first === 'tile-finish' ? 'finish' : first === 'tile-switch' ? 'switch' : p.kind;
     return { kind, route: p.path ? u16(p.path) : null, loop, eats: p.kind === 'bfs' && p.path && p.path.at(-1) === g.food };
   }
+  if (id === 'local-cycle') {   // along its loop; where the head is on a port, a pair of swaps that brings the food closer
+    const d = g.decide(), loop = d.swap || !g._loop ? (g._loop = Uint16Array.from(loopAfter(g, d))) : g._loop;
+    return { kind: d.kind, loop, ahead: d.ahead, saved: d.saved || 0, tried: d.tried || 0, swap: d.swap ? u16(d.swap.source) : null };
+  }
+  if (id === 'reachability-guard') {   // the C rule's route, checked: once eaten, is every empty cell still reached?
+    const d = g.decide(), c = g.mode === 'c-food' || g.mode === 'c-tail' ? g.mode : 'c-disabled';
+    if (d.kind === 'safe') return { kind: body.length + 1 >= g.n ? 'finish' : 'food', route: u16(d.route), back: u16(roadBack(g, afterEat(body, Array.from(d.route)))) };
+    if (d.kind === 'guard') return { kind: 'guard', route: u16(d.route), cut: u16(d.cut), cutOff: d.cutOff, tailBack: d.tailBack, next: d.next, missing: d.missing };
+    if (d.kind === 'spread') return { kind: 'spread', next: d.next, missing: d.missing, from: c, choices: d.options.length };
+    return { kind: d.kind, next: d.next, from: c, checked: !!d.checked, route: u16(d.route), cut: u16(d.cut) };   // relax / relaxed / no-safe
+  }
+  if (id === 'cell-tree') {   // A* inside the tree of squares; first to a cell that eating would cut off
+    const d = g.decide();
+    return { kind: d.kind, route: u16(d.route), food: u16(d.food), target: d.target ?? -1, unreachable: d.unreachable || 0, trimmed: d.trimmed || 0, why: d.why || null };
+  }
   return { kind: '?' };
+}
+// 动态回路's loop as it will be for this move (the swap, if any, made), from the head.
+function loopAfter(g, d) {
+  const s = g.successor.slice();
+  if (d.swap) d.swap.source.forEach((p, k) => { s[p] = d.swap.target[k]; });
+  const out = [];
+  for (let p = g.body[0], i = 0; i < g.n; i++, p = s[p]) out.push(p);
+  return out;
 }
 const manhattan = (g, a, b) => {
   let dx = Math.abs(a % g.w - b % g.w), dy = Math.abs(Math.floor(a / g.w) - Math.floor(b / g.w));
@@ -1449,16 +1844,19 @@ const manhattan = (g, a, b) => {
   return dx + dy;
 };
 
+const ROADS = new Set(['c-directed', 'tiled-directed', 'reachability-guard', 'cell-tree']);   // the snakes kept to one-way roads
+
 // One game, recorded in slices so the page never stalls. The snake's path is kept as the
 // list of cells its head has been on (the body is always the last `len` of them).
 class Recording {
   constructor(id, w, h, seed, wrap) {
     this.id = id; this.w = w; this.h = h; this.cells = w * h; this.seed = seed; this.wrap = wrap;
     this.maxSteps = Math.max(60000, this.cells * this.cells);   // 循规蹈矩 needs about cells² / 2
+    this.why = []; this.ate = []; this.outcome = null; this.loop = null; this.seen = new Map();
+    if (!supports(id, w, h, wrap)) { this.outcome = 'na'; this.heads = [0, 1]; this.lens = [2]; this.foods = [-1]; this.roads = null; return; }
     this.g = makeGame(id, w, h, seed, wrap);
-    this.heads = [this.g.body[1], this.g.body[0]]; this.lens = [2]; this.foods = [this.g.food]; this.why = []; this.ate = [];
-    this.outcome = null; this.loop = null; this.seen = new Map();
-    this.roads = id === 'c-directed' || id === 'tiled-directed' ? Array.from({ length: this.cells }, (_, p) => this.g.directedNeighbors(p).slice()) : null;
+    this.heads = [this.g.body[1], this.g.body[0]]; this.lens = [2]; this.foods = [this.g.food];
+    this.roads = ROADS.has(id) ? Array.from({ length: this.cells }, (_, p) => this.g.directedNeighbors(p).slice()) : null;
   }
   get steps() { return this.lens.length - 1; }
   body(k) { const L = this.lens[k], out = new Array(L); for (let j = 0; j < L; j++) out[j] = this.heads[k + 1 - j]; return out; }
@@ -1485,12 +1883,12 @@ class Recording {
 }
 
 // web/lab/app.js
-// 《退路》实验台: watch the film's six snakes play any opening (one game, step by step, with the
-// lines that explain each move), or race all six on the same opening.
+// 《退路》实验台: watch the nine snakes (the film's six and three more) play any opening (one game,
+// step by step, with the lines that explain each move), or race all nine on the same opening.
 
 const $ = (s, el = document) => el.querySelector(s);
 const SPEEDS = [{ label: '慢', sps: 3 }, { label: '1×', sps: 8 }, { label: '4×', sps: 32 }, { label: '16×', sps: 128 }, { label: '64×', sps: 512 }];
-const SIZES = [6, 8, 9, 10, 12, 16], SIDE = [3, 20];   // the presets, and the range of a custom side
+const SIZES = [6, 8, 9, 10, 12, 16, 20, 30], SIDE = [3, 30];   // the presets, and the range of a custom side
 const MARGIN = 34;   // board units around the board: its rim and the gold flash
 // "{金} [红] <蓝>" → spans
 const rich = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
@@ -1572,6 +1970,28 @@ function whyText(id, w, rec, k) {
       if (w.kind === 'fallback') return '[画不出退路图] → 沿{原来的环线}走，不冒险';
       if (w.kind === 'finish') return '最后一口，{不需要退路}：吃完棋盘就满了';
       return w.kind === 'switch' ? '扳{道岔}：换一条环线，去吃留下的那格' : '沿环线走';
+    case 'local-cycle':
+      if (w.kind === 'swap') return `{改道}：换掉两处接口，环线还是一整条，食物近了 ${w.saved} 步（在前方 <${w.ahead} 步>）`;
+      if (w.ahead === 1) return '沿环线走一步，就吃到';
+      if (w.kind === 'tried') return w.tried ? `试了 ${w.tried} 种换法，[都没有更近] → 沿环线走（食物在前方 ${w.ahead} 步）` : `脚下的接口能换，附近的[都有身子占着] → 沿环线走（食物在前方 ${w.ahead} 步）`;
+      return `沿环线走：食物在前方 ${w.ahead} 步，{退路}就是这条环线`;
+    case 'reachability-guard':
+      if (w.kind === 'food') return `沿单行道找到路 <${steps(w.route)} 步>，试吃：空地{连成一片}，回得到尾巴 → 去吃`;
+      if (w.kind === 'finish') return '最后一口，{不需要退路}';
+      if (w.kind === 'guard') return `试吃：吃完会有 [${w.cutOff} 格空地被隔开]${w.tailBack ? '' : '，也[回不到尾巴]'} → 换个出口，${w.missing ? `隔开的最少（${w.missing} 格）` : '{空地不被隔开}'}`;
+      if (w.kind === 'spread') return `${w.from === 'c-disabled' ? '单行道上[没有路]' : '去吃的路吃完回不到尾巴'} → 挑个出口：${w.missing ? `隔开的空地最少（${w.missing} 格）` : '{空地不被隔开}'}，离尾巴最远`;
+      if (w.kind === 'relax') return `[${2 * rec.cells} 步没吃到]：放下检查，照单行道的原规则走，吃到为止`;
+      if (w.kind === 'relaxed') return '检查暂时放下：照单行道的原规则走，吃到下一口再恢复';
+      if (w.kind === 'no-safe') return w.checked ? '[每个出口都会隔开空地]，只好照原来的路去吃' : '[每个出口都不安全] → 照单行道的原规则走';
+      return '';
+    case 'cell-tree':
+      if (w.kind === 'path') return `树里找到路 <${steps(w.route)} 步>，试吃：吃完每格空地都{还到得了} → 去吃${w.trimmed ? `（尾巴最后 ${w.trimmed} 格会先让开，当作空地）` : ''}`;
+      if (w.kind === 'detour') return `试吃：吃完有 [${w.unreachable} 格到不了] → 先绕去最近的那格，{别把它关在外面}`;
+      if (w.kind === 'cached') return w.why === 'no-path' ? `这一步树里[找不到路] → 照记下的路走（还剩 ${steps(w.route)} 步）`
+        : w.why === 'unreachable' ? `吃完会有 [${w.unreachable} 格到不了]，又没处可绕 → 照记下的路走` : `照记下的路走（还剩 <${steps(w.route)} 步>）`;
+      if (w.kind === 'step') return '[找不到路] → 往树允许的方向先走一步';
+      if (w.kind === 'probe') return '树里[没有去食物的路]';
+      return '[无路可走]';
   }
   return '';
 }
@@ -1579,13 +1999,17 @@ function whyText(id, w, rec, k) {
 function endText(id, r) {
   if (r.outcome === 'won') return `{吃满}：${r.steps} 步走满 ${r.cells} 格。往回拖进度条，看每一步怎么选的`;
   if (r.outcome === 'limit') return `走了 ${r.steps} 步还没吃满，先停在这里`;
-  if (id === 'c-directed') return `[撞死]：单行道上没有路了，照着记下的路往前走，撞上了${r.crash >= 0 ? '自己' : '墙'}`;
+  if (r.outcome === 'na') return naText(id);
+  if (id === 'c-directed' || id === 'reachability-guard') return `[撞死]：单行道上没有路了，照着记下的路往前走，撞上了${r.crash >= 0 ? '自己' : '墙'}`;
   return `[撞死]：四面${r.wrap ? '都' : '不是墙就'}是自己的身子，出口被自己堵死了。往回拖，看是哪一口吃坏的`;
 }
+// 动态回路 and 加权 Cell: why this board will not do.
+const naText = id => `${SNAKES.find(s => s.id === id).name}：用 2×2 小格拼棋盘，要[宽、高都是偶数、不穿边]。换一块棋盘试试`;
 // The one-way streets need both sides even; a loop through every cell needs an even number of cells.
 function hintFor(id, w, h, wrap) {
   const odd = (w * h) % 2;
-  if (id === 'c-directed' && (w % 2 || h % 2)) return wrap ? '有一边是奇数：穿边以后每格都进得去、出得来，但单行道[没有保证]了，多半还是撞死。'
+  if (!supports(id, w, h, wrap)) return naText(id) + '。';
+  if ((id === 'c-directed' || id === 'reachability-guard') && (w % 2 || h % 2)) return wrap ? '有一边是奇数：穿边以后每格都进得去、出得来，但单行道[没有保证]了，多半还是撞死。'
     : '有一边是奇数：单行道有的格子[进不去]，有的[出不来]，多半撞死（视频第 07 章）。';
   if ((id === 'cycle' || id === 'hybrid') && odd) return '格子数是奇数，画不出走遍全盘的环线：这里用两条环线，靠{道岔}换着走。';
   if (id === 'tiled-directed' && odd) return '格子数是奇数：小环拼成环线，留下的那格放在{道岔}上，最后一口吃掉它。';
@@ -1628,24 +2052,33 @@ const Single = {
     boardTransform(ctx, cv, B);
     drawBase(ctx, B);
     const { k, f } = this.at(this.p), body = r.body(k), next = k < r.steps ? r.body(k + 1) : null, w = r.why[k], sps = SPEEDS[S.speed].sps;
-    const calm = sps <= 8 ? 1 : sps <= 32 ? 0.75 : 0.35, lines = S.lines && w, ringy = S.snake === 'cycle' || S.snake === 'hybrid';
-    const ghost = w && w.route && (w.kind === 'food' || w.kind === 'tail' || w.eats) && w.route.length > 1 ? afterEat(body, Array.from(w.route)) : null;
-    if (lines && r.roads) drawRoads(ctx, B, r.roads, S.snake === 'c-directed' ? 0.45 : 0.22);
+    const calm = sps <= 8 ? 1 : sps <= 32 ? 0.75 : 0.35, lines = S.lines && w, ringy = S.snake === 'cycle' || S.snake === 'hybrid' || S.snake === 'local-cycle';
+    const eatsAt = w && w.route && w.route.length > 1 && w.route[w.route.length - 1] === r.foods[k];
+    const ghost = w && w.route && (w.kind === 'food' || w.kind === 'tail' || w.eats || ((w.kind === 'guard' || w.kind === 'path') && eatsAt)) && w.route.length > 1 ? afterEat(body, Array.from(w.route)) : null;
+    if (lines && r.roads) drawRoads(ctx, B, r.roads, S.snake === 'c-directed' || S.snake === 'reachability-guard' ? 0.45 : 0.22);
+    if (lines && S.snake === 'cell-tree') drawSquareTree(ctx, B, body, body.length - (w.trimmed || 0), 0.5 * calm);
     if (lines) {
       if (w.loop) drawLoop(ctx, B, w.loop, { alpha: S.snake === 'tiled-directed' ? 0.9 * calm : 0.32, width: S.snake === 'tiled-directed' ? 3 : 2.4 });
       if (ringy && w.loop) {   // the way back: from the head forward along the ring to the tail; and, for 循规蹈矩, the way to the food
         const pos = positions(w.loop), back = pos.has(body[0]) && pos.has(body.at(-1)) ? along(w.loop, pos, body[0], body.at(-1)) : null;
         if (back && back.length > 1) drawPath(ctx, B, back, C.gold, { width: 4, alpha: 0.7 * calm });
-        if (S.snake === 'cycle' && r.foods[k] >= 0 && pos.has(r.foods[k])) drawPath(ctx, B, along(w.loop, pos, body[0], r.foods[k]), C.blue, { width: 6, alpha: calm });
+        if ((S.snake === 'cycle' || S.snake === 'local-cycle') && r.foods[k] >= 0 && pos.has(r.foods[k])) drawPath(ctx, B, along(w.loop, pos, body[0], r.foods[k]), C.blue, { width: 6, alpha: calm });
+        if (w.swap) for (const c of w.swap) { const [x, y] = B.xy(c); glowDot(ctx, x, y, 40, C.gold, 0.7 * calm); }
       }
-      if (w.route && w.route.length > 1 && w.kind !== 'tail') drawPath(ctx, B, w.route, w.kind === 'stuck' ? C.red : C.blue, { width: 5, alpha: 0.9 * calm });
+      if (w.cut) for (const c of w.cut) { const [x, y] = B.xy(c); cross(ctx, x, y, 9, C.red, 0.6 * calm, 3.5); }
+      if ((w.kind === 'spread' || w.kind === 'guard') && w.next >= 0) drawPath(ctx, B, [body[0], w.next], C.gold, { width: 6, alpha: calm });
+      if (S.snake === 'cell-tree' && w.kind === 'detour') {
+        if (w.food) drawPath(ctx, B, w.food, C.red, { width: 3, alpha: 0.45 * calm });
+        if (w.target >= 0) { const [x, y] = B.xy(w.target); cross(ctx, x, y, 16, C.red, 0.9 * calm); }
+      }
+      if (w.route && w.route.length > 1 && w.kind !== 'tail' && w.kind !== 'spread') drawPath(ctx, B, w.route, w.kind === 'stuck' || w.kind === 'guard' ? C.red : w.kind === 'detour' ? C.gold : C.blue, { width: 5, alpha: 0.9 * calm });
       if (w.kind === 'tail' && w.tail) drawPath(ctx, B, w.tail, C.gold, { width: 4, alpha: 0.85 * calm });
-      if ((S.snake === 'bfs-tail' || S.snake === 'c-directed') && w.back && w.back.length > 1 && sps <= 32) drawPath(ctx, B, w.back, C.gold, { width: 4, alpha: 0.8 * calm });
+      if ((S.snake === 'bfs-tail' || S.snake === 'c-directed' || S.snake === 'reachability-guard') && w.back && w.back.length > 1 && sps <= 32) drawPath(ctx, B, w.back, C.gold, { width: 4, alpha: 0.8 * calm });
     }
     drawApple(ctx, B, r.foods[k], now);
     // the imagined body (eaten in imagination) only while stepping or slow, with the real one stepped back
     const dead = r.outcome === 'dead' && k >= r.steps ? 1 : 0, imagine = lines && ghost && w.kind !== 'tail' && (!S.playing || sps <= 3) ? 1 : 0;
-    drawSnake(ctx, B, body, next, f, { dead, dim: 0.55 * imagine });
+    if (r.outcome !== 'na') drawSnake(ctx, B, body, next, f, { dead, dim: 0.55 * imagine });
     if (imagine) drawGhost(ctx, B, ghost, 0.8);
     if (lines && w.kind === 'tail' && ghost && S.snake === 'bfs-tail' && sps <= 32) { const [x, y] = B.xy(ghost[0]); cross(ctx, x, y, 18, C.red, 0.9 * calm); }
     // bites: a gold ring off the head for half a second of play (by the playhead, so scrubbing shows them too)
@@ -1659,12 +2092,12 @@ const Single = {
     if (this.flash) drawFullFlash(ctx, B, (now - this.flash) / 0.9);
     if (dead) { const [x, y] = B.xy(body[0]); glowDot(ctx, x, y, 110, C.red, 0.35); if (r.crash >= 0) { const [cx, cy] = B.xy(r.crash); cross(ctx, cx, cy, 16, C.red, 0.95); } }
     // text
-    $('#len').textContent = body.length; $('#cells').textContent = `/ ${r.cells}`;
+    $('#len').textContent = r.outcome === 'na' ? '—' : body.length; $('#cells').textContent = `/ ${r.cells}`;
     $('#step').textContent = `第 ${k} 步`;
     $('#why').innerHTML = sps > 32 && S.playing ? '<span class="dim">快进中</span>' : rich(r.outcome && k >= r.steps && r.outcome !== 'cycle' ? endText(S.snake, r) : whyText(S.snake, w, r, k));
     const banner = $('#banner'), out = r.outcome === 'cycle' && this.p >= r.loop.start + r.loop.length ? 'cycle' : r.outcome && r.outcome !== 'cycle' && k >= r.steps ? r.outcome : null;
     banner.className = out ? `banner show ${out}` : 'banner';
-    if (out) banner.innerHTML = out === 'won' ? `<b>吃满</b><span>${r.steps} 步 · 吃了 ${r.lens[r.steps] - 2} 口</span>`
+    if (out) banner.innerHTML = out === 'na' ? '<b>不适用</b><span>宽、高都要是偶数，不穿边</span>' : out === 'won' ? `<b>吃满</b><span>${r.steps} 步 · 吃了 ${r.lens[r.steps] - 2} 口</span>`
       : out === 'dead' ? `<b>撞死</b><span>${r.lens[r.steps]} / ${r.cells} · 第 ${r.steps} 步</span>`
       : out === 'cycle' ? `<b>原地绕圈</b><span>${r.lens[r.loop.start]} / ${r.cells} · 第 ${r.loop.start} 步起，每 ${r.loop.length} 步一圈</span>`
       : `<b>到上限了</b><span>${r.steps} 步</span>`;
@@ -1688,7 +2121,7 @@ function drawScrubber() {
   const p = Math.min(Single.p, r.steps), px = XX(p);
   ctx.strokeStyle = rgba(C.text, 0.9); ctx.lineWidth = 6 * dpr; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(px, y); ctx.stroke();
   ctx.fillStyle = rgba(C.text); ctx.beginPath(); ctx.arc(px, y, 8 * dpr, 0, Math.PI * 2); ctx.fill();
-  if (done) { ctx.fillStyle = rgba(r.outcome === 'won' ? C.gold : C.red); ctx.beginPath(); ctx.arc(x1, y, 5 * dpr, 0, Math.PI * 2); ctx.fill(); }
+  if (done && r.outcome !== 'na') { ctx.fillStyle = rgba(r.outcome === 'won' ? C.gold : C.red); ctx.beginPath(); ctx.arc(x1, y, 5 * dpr, 0, Math.PI * 2); ctx.fill(); }
   return { x0: x0 / dpr, x1: x1 / dpr, est };
 }
 
@@ -1713,13 +2146,13 @@ const Race = {
       const e = this.endOf(r);
       if (before < e && this.s >= e && r.outcome !== 'cycle') { this.flashes[j] = performance.now() / 1000; if (r.outcome === 'won') Sound.full(); else if (r.outcome === 'dead') Sound.crash(); }
     });
-    const last = Math.max(...this.recs.map(r => (r.outcome === 'won' || r.outcome === 'dead' || r.outcome === 'limit' ? r.steps : r.outcome === 'cycle' ? r.loop.start : Infinity)));
+    const last = Math.max(...this.recs.map(r => (r.outcome === 'won' || r.outcome === 'dead' || r.outcome === 'limit' || r.outcome === 'na' ? r.steps : r.outcome === 'cycle' ? r.loop.start : Infinity)));
     if (this.s >= last && !this.done) { this.s = last; this.done = true; S.playing = false; this.results(); renderControls(); }
   },
   results() {
     const rows = this.recs.map((r, j) => ({ j, r })), won = rows.filter(x => x.r.outcome === 'won').sort((a, b) => a.r.steps - b.r.steps), rest = rows.filter(x => x.r.outcome !== 'won');
     $('#results').innerHTML = [...won.map((x, i) => `<li class="${i ? '' : 'first'}"><span class="rank">${i + 1}</span><span>${SNAKES[x.j].name}</span><span class="num">${x.r.steps} 步吃满</span></li>`),
-      ...rest.map(x => `<li class="out"><span class="rank">—</span><span>${SNAKES[x.j].name}</span><span class="num">${x.r.outcome === 'dead' ? `撞死 · ${x.r.lens[x.r.steps]} 格` : x.r.outcome === 'cycle' ? `原地绕圈 · ${x.r.lens[x.r.loop.start]} 格` : '到上限'}</span></li>`)].join('');
+      ...rest.map(x => `<li class="out"><span class="rank">—</span><span>${SNAKES[x.j].name}</span><span class="num">${x.r.outcome === 'dead' ? `撞死 · ${x.r.lens[x.r.steps]} 格` : x.r.outcome === 'cycle' ? `原地绕圈 · ${x.r.lens[x.r.loop.start]} 格` : x.r.outcome === 'na' ? '这块棋盘不适用' : '到上限'}</span></li>`)].join('');
   },
   draw() {
     const now = performance.now() / 1000;
@@ -1732,11 +2165,11 @@ const Race = {
       else if (k >= r.steps) { k = r.steps; f = 0; }
       const over = r.outcome && r.outcome !== 'cycle' && this.s >= r.steps;
       drawApple(ctx, B, r.foods[k], now);
-      drawSnake(ctx, B, r.body(k), k < r.steps ? r.body(k + 1) : null, f, { dead: over && r.outcome === 'dead' ? 1 : 0 });
+      if (r.outcome !== 'na') drawSnake(ctx, B, r.body(k), k < r.steps ? r.body(k + 1) : null, f, { dead: over && r.outcome === 'dead' ? 1 : 0 });
       if (this.flashes[j] && r.outcome === 'won') drawFullFlash(ctx, B, (now - this.flashes[j]) / 0.9);
       card.className = `card ${over ? r.outcome : r.outcome === 'cycle' && this.s >= e ? 'cycle' : ''}`;
       const len = r.lens[k], rank = over && r.outcome === 'won' ? 1 + this.recs.filter(q => q.outcome === 'won' && q.steps < r.steps && this.s >= q.steps).length : 0;
-      $(`#rs${j}`).textContent = over ? (r.outcome === 'won' ? `第 ${rank} · ${r.steps} 步吃满` : r.outcome === 'dead' ? `撞死 · ${len} / ${r.cells}` : `${r.steps} 步`)
+      $(`#rs${j}`).textContent = over ? (r.outcome === 'won' ? `第 ${rank} · ${r.steps} 步吃满` : r.outcome === 'dead' ? `撞死 · ${len} / ${r.cells}` : r.outcome === 'na' ? '不适用' : `${r.steps} 步`)
         : r.outcome === 'cycle' && this.s >= e ? `绕圈 · ${len} / ${r.cells}` : `${Math.floor(Math.min(this.s, r.steps))} 步 · ${len} 格`;
     });
     $('#racestep').textContent = `第 ${Math.floor(this.s)} 步`;
@@ -1748,8 +2181,9 @@ function renderControls() {
   document.body.dataset.view = S.view;
   document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === S.view)));
   const sn = SNAKES.find(x => x.id === S.snake);
-  $('#name').textContent = sn.name; $('#en').textContent = sn.en; $('#line').textContent = sn.line;
-  document.querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === S.snake)));
+  $('#name').textContent = sn.name; $('#en').textContent = sn.en; $('#line').textContent = sn.full ? `${sn.full}：${sn.line}` : sn.line;
+  const [bw, bh] = dims();
+  document.querySelectorAll('.chip').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.id === S.snake)); b.classList.toggle('na', !supports(b.dataset.id, bw, bh, S.wrap)); });
   document.querySelectorAll('[data-size]').forEach(b => b.setAttribute('aria-pressed', String(!S.custom && +b.dataset.size === S.n)));
   $('#wrap').checked = S.wrap; $('#custom').checked = S.custom; $('#dims').hidden = !S.custom; $('#cw').value = S.cw; $('#ch').value = S.ch; $('#lines').checked = S.lines; $('#sound').setAttribute('aria-pressed', String(S.sound));
   $('#seed').value = S.view === 'race' ? S.raceSeed : S.seed;
@@ -1797,7 +2231,7 @@ function bind() {
     if (e.target.tagName === 'INPUT') return;
     if (e.key === ' ') { e.preventDefault(); togglePlay(); }
     else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { if (S.view !== 'single') return; e.preventDefault(); S.playing = false; Single.p = Math.max(0, Math.min(Single.rec.steps, Math.round(Single.p) + (e.key === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 10 : 1))); renderControls(); }
-    else if (e.key >= '1' && e.key <= '6' && S.view === 'single') { S.snake = SNAKES[+e.key - 1].id; restart(); }
+    else if (e.key >= '1' && e.key <= '9' && S.view === 'single') { S.snake = SNAKES[+e.key - 1].id; restart(); }
     else if (e.key === 'r' || e.key === 'R') $('#dice').click();
   });
 }
@@ -1811,7 +2245,7 @@ function step(t) {   // one frame at time t (ms)
 function frame(t) { step(t); requestAnimationFrame(frame); }
 window.__lab = { step, S, Single, Race };   // for testing the page headless (no animation frames there)
 function init() {
-  $('#chips').innerHTML = SNAKES.map((sn, j) => `<button class="chip" data-id="${sn.id}" aria-pressed="false"><b>${sn.name}</b><span>${['01', '02', '03', '04', '05', '06'][j]}</span></button>`).join('');
+  $('#chips').innerHTML = SNAKES.map((sn, j) => `<button class="chip" data-id="${sn.id}" aria-pressed="false"><b>${sn.name}</b><span>${String(j + 1).padStart(2, '0')}</span></button>`).join('');
   $('#sizes').innerHTML = SIZES.map(n => `<button data-size="${n}" aria-pressed="false">${n}×${n}</button>`).join('');
   bind(); restart(); requestAnimationFrame(frame);
 }

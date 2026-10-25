@@ -76,6 +76,8 @@ body[data-view="race"] .transport { justify-content: center; gap: 14px; }
 .chip span { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .chip[aria-pressed="true"] { border-color: rgba(242,193,78,0.65); background: rgba(242,193,78,0.08); }
 .chip[aria-pressed="true"] b { color: var(--gold); }
+.chip.na { opacity: 0.45; }
+.card.na .status { color: var(--dim); } .card.na canvas { opacity: 0.35; }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .seg button { padding: 6px 12px; border-radius: 10px; border: 1px solid var(--edge); background: rgba(255,255,255,0.025); font-size: 14px; font-variant-numeric: tabular-nums; }
 .seg button[aria-pressed="true"] { border-color: rgba(242,193,78,0.65); color: var(--gold); background: rgba(242,193,78,0.08); }

@@ -1,10 +1,10 @@
 'use strict';
-// 《退路》实验台: watch the film's six snakes play any opening (one game, step by step, with the
-// lines that explain each move), or race all six on the same opening.
+// 《退路》实验台: watch the nine snakes (the film's six and three more) play any opening (one game,
+// step by step, with the lines that explain each move), or race all nine on the same opening.
 
 const $ = (s, el = document) => el.querySelector(s);
 const SPEEDS = [{ label: '慢', sps: 3 }, { label: '1×', sps: 8 }, { label: '4×', sps: 32 }, { label: '16×', sps: 128 }, { label: '64×', sps: 512 }];
-const SIZES = [6, 8, 9, 10, 12, 16], SIDE = [3, 20];   // the presets, and the range of a custom side
+const SIZES = [6, 8, 9, 10, 12, 16, 20, 30], SIDE = [3, 30];   // the presets, and the range of a custom side
 const MARGIN = 34;   // board units around the board: its rim and the gold flash
 // "{金} [红] <蓝>" → spans
 const rich = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
@@ -86,6 +86,28 @@ function whyText(id, w, rec, k) {
       if (w.kind === 'fallback') return '[画不出退路图] → 沿{原来的环线}走，不冒险';
       if (w.kind === 'finish') return '最后一口，{不需要退路}：吃完棋盘就满了';
       return w.kind === 'switch' ? '扳{道岔}：换一条环线，去吃留下的那格' : '沿环线走';
+    case 'local-cycle':
+      if (w.kind === 'swap') return `{改道}：换掉两处接口，环线还是一整条，食物近了 ${w.saved} 步（在前方 <${w.ahead} 步>）`;
+      if (w.ahead === 1) return '沿环线走一步，就吃到';
+      if (w.kind === 'tried') return w.tried ? `试了 ${w.tried} 种换法，[都没有更近] → 沿环线走（食物在前方 ${w.ahead} 步）` : `脚下的接口能换，附近的[都有身子占着] → 沿环线走（食物在前方 ${w.ahead} 步）`;
+      return `沿环线走：食物在前方 ${w.ahead} 步，{退路}就是这条环线`;
+    case 'reachability-guard':
+      if (w.kind === 'food') return `沿单行道找到路 <${steps(w.route)} 步>，试吃：空地{连成一片}，回得到尾巴 → 去吃`;
+      if (w.kind === 'finish') return '最后一口，{不需要退路}';
+      if (w.kind === 'guard') return `试吃：吃完会有 [${w.cutOff} 格空地被隔开]${w.tailBack ? '' : '，也[回不到尾巴]'} → 换个出口，${w.missing ? `隔开的最少（${w.missing} 格）` : '{空地不被隔开}'}`;
+      if (w.kind === 'spread') return `${w.from === 'c-disabled' ? '单行道上[没有路]' : '去吃的路吃完回不到尾巴'} → 挑个出口：${w.missing ? `隔开的空地最少（${w.missing} 格）` : '{空地不被隔开}'}，离尾巴最远`;
+      if (w.kind === 'relax') return `[${2 * rec.cells} 步没吃到]：放下检查，照单行道的原规则走，吃到为止`;
+      if (w.kind === 'relaxed') return '检查暂时放下：照单行道的原规则走，吃到下一口再恢复';
+      if (w.kind === 'no-safe') return w.checked ? '[每个出口都会隔开空地]，只好照原来的路去吃' : '[每个出口都不安全] → 照单行道的原规则走';
+      return '';
+    case 'cell-tree':
+      if (w.kind === 'path') return `树里找到路 <${steps(w.route)} 步>，试吃：吃完每格空地都{还到得了} → 去吃${w.trimmed ? `（尾巴最后 ${w.trimmed} 格会先让开，当作空地）` : ''}`;
+      if (w.kind === 'detour') return `试吃：吃完有 [${w.unreachable} 格到不了] → 先绕去最近的那格，{别把它关在外面}`;
+      if (w.kind === 'cached') return w.why === 'no-path' ? `这一步树里[找不到路] → 照记下的路走（还剩 ${steps(w.route)} 步）`
+        : w.why === 'unreachable' ? `吃完会有 [${w.unreachable} 格到不了]，又没处可绕 → 照记下的路走` : `照记下的路走（还剩 <${steps(w.route)} 步>）`;
+      if (w.kind === 'step') return '[找不到路] → 往树允许的方向先走一步';
+      if (w.kind === 'probe') return '树里[没有去食物的路]';
+      return '[无路可走]';
   }
   return '';
 }
@@ -93,13 +115,17 @@ function whyText(id, w, rec, k) {
 function endText(id, r) {
   if (r.outcome === 'won') return `{吃满}：${r.steps} 步走满 ${r.cells} 格。往回拖进度条，看每一步怎么选的`;
   if (r.outcome === 'limit') return `走了 ${r.steps} 步还没吃满，先停在这里`;
-  if (id === 'c-directed') return `[撞死]：单行道上没有路了，照着记下的路往前走，撞上了${r.crash >= 0 ? '自己' : '墙'}`;
+  if (r.outcome === 'na') return naText(id);
+  if (id === 'c-directed' || id === 'reachability-guard') return `[撞死]：单行道上没有路了，照着记下的路往前走，撞上了${r.crash >= 0 ? '自己' : '墙'}`;
   return `[撞死]：四面${r.wrap ? '都' : '不是墙就'}是自己的身子，出口被自己堵死了。往回拖，看是哪一口吃坏的`;
 }
+// 动态回路 and 加权 Cell: why this board will not do.
+const naText = id => `${SNAKES.find(s => s.id === id).name}：用 2×2 小格拼棋盘，要[宽、高都是偶数、不穿边]。换一块棋盘试试`;
 // The one-way streets need both sides even; a loop through every cell needs an even number of cells.
 function hintFor(id, w, h, wrap) {
   const odd = (w * h) % 2;
-  if (id === 'c-directed' && (w % 2 || h % 2)) return wrap ? '有一边是奇数：穿边以后每格都进得去、出得来，但单行道[没有保证]了，多半还是撞死。'
+  if (!supports(id, w, h, wrap)) return naText(id) + '。';
+  if ((id === 'c-directed' || id === 'reachability-guard') && (w % 2 || h % 2)) return wrap ? '有一边是奇数：穿边以后每格都进得去、出得来，但单行道[没有保证]了，多半还是撞死。'
     : '有一边是奇数：单行道有的格子[进不去]，有的[出不来]，多半撞死（视频第 07 章）。';
   if ((id === 'cycle' || id === 'hybrid') && odd) return '格子数是奇数，画不出走遍全盘的环线：这里用两条环线，靠{道岔}换着走。';
   if (id === 'tiled-directed' && odd) return '格子数是奇数：小环拼成环线，留下的那格放在{道岔}上，最后一口吃掉它。';
@@ -142,24 +168,33 @@ const Single = {
     boardTransform(ctx, cv, B);
     drawBase(ctx, B);
     const { k, f } = this.at(this.p), body = r.body(k), next = k < r.steps ? r.body(k + 1) : null, w = r.why[k], sps = SPEEDS[S.speed].sps;
-    const calm = sps <= 8 ? 1 : sps <= 32 ? 0.75 : 0.35, lines = S.lines && w, ringy = S.snake === 'cycle' || S.snake === 'hybrid';
-    const ghost = w && w.route && (w.kind === 'food' || w.kind === 'tail' || w.eats) && w.route.length > 1 ? afterEat(body, Array.from(w.route)) : null;
-    if (lines && r.roads) drawRoads(ctx, B, r.roads, S.snake === 'c-directed' ? 0.45 : 0.22);
+    const calm = sps <= 8 ? 1 : sps <= 32 ? 0.75 : 0.35, lines = S.lines && w, ringy = S.snake === 'cycle' || S.snake === 'hybrid' || S.snake === 'local-cycle';
+    const eatsAt = w && w.route && w.route.length > 1 && w.route[w.route.length - 1] === r.foods[k];
+    const ghost = w && w.route && (w.kind === 'food' || w.kind === 'tail' || w.eats || ((w.kind === 'guard' || w.kind === 'path') && eatsAt)) && w.route.length > 1 ? afterEat(body, Array.from(w.route)) : null;
+    if (lines && r.roads) drawRoads(ctx, B, r.roads, S.snake === 'c-directed' || S.snake === 'reachability-guard' ? 0.45 : 0.22);
+    if (lines && S.snake === 'cell-tree') drawSquareTree(ctx, B, body, body.length - (w.trimmed || 0), 0.5 * calm);
     if (lines) {
       if (w.loop) drawLoop(ctx, B, w.loop, { alpha: S.snake === 'tiled-directed' ? 0.9 * calm : 0.32, width: S.snake === 'tiled-directed' ? 3 : 2.4 });
       if (ringy && w.loop) {   // the way back: from the head forward along the ring to the tail; and, for 循规蹈矩, the way to the food
         const pos = positions(w.loop), back = pos.has(body[0]) && pos.has(body.at(-1)) ? along(w.loop, pos, body[0], body.at(-1)) : null;
         if (back && back.length > 1) drawPath(ctx, B, back, C.gold, { width: 4, alpha: 0.7 * calm });
-        if (S.snake === 'cycle' && r.foods[k] >= 0 && pos.has(r.foods[k])) drawPath(ctx, B, along(w.loop, pos, body[0], r.foods[k]), C.blue, { width: 6, alpha: calm });
+        if ((S.snake === 'cycle' || S.snake === 'local-cycle') && r.foods[k] >= 0 && pos.has(r.foods[k])) drawPath(ctx, B, along(w.loop, pos, body[0], r.foods[k]), C.blue, { width: 6, alpha: calm });
+        if (w.swap) for (const c of w.swap) { const [x, y] = B.xy(c); glowDot(ctx, x, y, 40, C.gold, 0.7 * calm); }
       }
-      if (w.route && w.route.length > 1 && w.kind !== 'tail') drawPath(ctx, B, w.route, w.kind === 'stuck' ? C.red : C.blue, { width: 5, alpha: 0.9 * calm });
+      if (w.cut) for (const c of w.cut) { const [x, y] = B.xy(c); cross(ctx, x, y, 9, C.red, 0.6 * calm, 3.5); }
+      if ((w.kind === 'spread' || w.kind === 'guard') && w.next >= 0) drawPath(ctx, B, [body[0], w.next], C.gold, { width: 6, alpha: calm });
+      if (S.snake === 'cell-tree' && w.kind === 'detour') {
+        if (w.food) drawPath(ctx, B, w.food, C.red, { width: 3, alpha: 0.45 * calm });
+        if (w.target >= 0) { const [x, y] = B.xy(w.target); cross(ctx, x, y, 16, C.red, 0.9 * calm); }
+      }
+      if (w.route && w.route.length > 1 && w.kind !== 'tail' && w.kind !== 'spread') drawPath(ctx, B, w.route, w.kind === 'stuck' || w.kind === 'guard' ? C.red : w.kind === 'detour' ? C.gold : C.blue, { width: 5, alpha: 0.9 * calm });
       if (w.kind === 'tail' && w.tail) drawPath(ctx, B, w.tail, C.gold, { width: 4, alpha: 0.85 * calm });
-      if ((S.snake === 'bfs-tail' || S.snake === 'c-directed') && w.back && w.back.length > 1 && sps <= 32) drawPath(ctx, B, w.back, C.gold, { width: 4, alpha: 0.8 * calm });
+      if ((S.snake === 'bfs-tail' || S.snake === 'c-directed' || S.snake === 'reachability-guard') && w.back && w.back.length > 1 && sps <= 32) drawPath(ctx, B, w.back, C.gold, { width: 4, alpha: 0.8 * calm });
     }
     drawApple(ctx, B, r.foods[k], now);
     // the imagined body (eaten in imagination) only while stepping or slow, with the real one stepped back
     const dead = r.outcome === 'dead' && k >= r.steps ? 1 : 0, imagine = lines && ghost && w.kind !== 'tail' && (!S.playing || sps <= 3) ? 1 : 0;
-    drawSnake(ctx, B, body, next, f, { dead, dim: 0.55 * imagine });
+    if (r.outcome !== 'na') drawSnake(ctx, B, body, next, f, { dead, dim: 0.55 * imagine });
     if (imagine) drawGhost(ctx, B, ghost, 0.8);
     if (lines && w.kind === 'tail' && ghost && S.snake === 'bfs-tail' && sps <= 32) { const [x, y] = B.xy(ghost[0]); cross(ctx, x, y, 18, C.red, 0.9 * calm); }
     // bites: a gold ring off the head for half a second of play (by the playhead, so scrubbing shows them too)
@@ -173,12 +208,12 @@ const Single = {
     if (this.flash) drawFullFlash(ctx, B, (now - this.flash) / 0.9);
     if (dead) { const [x, y] = B.xy(body[0]); glowDot(ctx, x, y, 110, C.red, 0.35); if (r.crash >= 0) { const [cx, cy] = B.xy(r.crash); cross(ctx, cx, cy, 16, C.red, 0.95); } }
     // text
-    $('#len').textContent = body.length; $('#cells').textContent = `/ ${r.cells}`;
+    $('#len').textContent = r.outcome === 'na' ? '—' : body.length; $('#cells').textContent = `/ ${r.cells}`;
     $('#step').textContent = `第 ${k} 步`;
     $('#why').innerHTML = sps > 32 && S.playing ? '<span class="dim">快进中</span>' : rich(r.outcome && k >= r.steps && r.outcome !== 'cycle' ? endText(S.snake, r) : whyText(S.snake, w, r, k));
     const banner = $('#banner'), out = r.outcome === 'cycle' && this.p >= r.loop.start + r.loop.length ? 'cycle' : r.outcome && r.outcome !== 'cycle' && k >= r.steps ? r.outcome : null;
     banner.className = out ? `banner show ${out}` : 'banner';
-    if (out) banner.innerHTML = out === 'won' ? `<b>吃满</b><span>${r.steps} 步 · 吃了 ${r.lens[r.steps] - 2} 口</span>`
+    if (out) banner.innerHTML = out === 'na' ? '<b>不适用</b><span>宽、高都要是偶数，不穿边</span>' : out === 'won' ? `<b>吃满</b><span>${r.steps} 步 · 吃了 ${r.lens[r.steps] - 2} 口</span>`
       : out === 'dead' ? `<b>撞死</b><span>${r.lens[r.steps]} / ${r.cells} · 第 ${r.steps} 步</span>`
       : out === 'cycle' ? `<b>原地绕圈</b><span>${r.lens[r.loop.start]} / ${r.cells} · 第 ${r.loop.start} 步起，每 ${r.loop.length} 步一圈</span>`
       : `<b>到上限了</b><span>${r.steps} 步</span>`;
@@ -202,7 +237,7 @@ function drawScrubber() {
   const p = Math.min(Single.p, r.steps), px = XX(p);
   ctx.strokeStyle = rgba(C.text, 0.9); ctx.lineWidth = 6 * dpr; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(px, y); ctx.stroke();
   ctx.fillStyle = rgba(C.text); ctx.beginPath(); ctx.arc(px, y, 8 * dpr, 0, Math.PI * 2); ctx.fill();
-  if (done) { ctx.fillStyle = rgba(r.outcome === 'won' ? C.gold : C.red); ctx.beginPath(); ctx.arc(x1, y, 5 * dpr, 0, Math.PI * 2); ctx.fill(); }
+  if (done && r.outcome !== 'na') { ctx.fillStyle = rgba(r.outcome === 'won' ? C.gold : C.red); ctx.beginPath(); ctx.arc(x1, y, 5 * dpr, 0, Math.PI * 2); ctx.fill(); }
   return { x0: x0 / dpr, x1: x1 / dpr, est };
 }
 
@@ -227,13 +262,13 @@ const Race = {
       const e = this.endOf(r);
       if (before < e && this.s >= e && r.outcome !== 'cycle') { this.flashes[j] = performance.now() / 1000; if (r.outcome === 'won') Sound.full(); else if (r.outcome === 'dead') Sound.crash(); }
     });
-    const last = Math.max(...this.recs.map(r => (r.outcome === 'won' || r.outcome === 'dead' || r.outcome === 'limit' ? r.steps : r.outcome === 'cycle' ? r.loop.start : Infinity)));
+    const last = Math.max(...this.recs.map(r => (r.outcome === 'won' || r.outcome === 'dead' || r.outcome === 'limit' || r.outcome === 'na' ? r.steps : r.outcome === 'cycle' ? r.loop.start : Infinity)));
     if (this.s >= last && !this.done) { this.s = last; this.done = true; S.playing = false; this.results(); renderControls(); }
   },
   results() {
     const rows = this.recs.map((r, j) => ({ j, r })), won = rows.filter(x => x.r.outcome === 'won').sort((a, b) => a.r.steps - b.r.steps), rest = rows.filter(x => x.r.outcome !== 'won');
     $('#results').innerHTML = [...won.map((x, i) => `<li class="${i ? '' : 'first'}"><span class="rank">${i + 1}</span><span>${SNAKES[x.j].name}</span><span class="num">${x.r.steps} 步吃满</span></li>`),
-      ...rest.map(x => `<li class="out"><span class="rank">—</span><span>${SNAKES[x.j].name}</span><span class="num">${x.r.outcome === 'dead' ? `撞死 · ${x.r.lens[x.r.steps]} 格` : x.r.outcome === 'cycle' ? `原地绕圈 · ${x.r.lens[x.r.loop.start]} 格` : '到上限'}</span></li>`)].join('');
+      ...rest.map(x => `<li class="out"><span class="rank">—</span><span>${SNAKES[x.j].name}</span><span class="num">${x.r.outcome === 'dead' ? `撞死 · ${x.r.lens[x.r.steps]} 格` : x.r.outcome === 'cycle' ? `原地绕圈 · ${x.r.lens[x.r.loop.start]} 格` : x.r.outcome === 'na' ? '这块棋盘不适用' : '到上限'}</span></li>`)].join('');
   },
   draw() {
     const now = performance.now() / 1000;
@@ -246,11 +281,11 @@ const Race = {
       else if (k >= r.steps) { k = r.steps; f = 0; }
       const over = r.outcome && r.outcome !== 'cycle' && this.s >= r.steps;
       drawApple(ctx, B, r.foods[k], now);
-      drawSnake(ctx, B, r.body(k), k < r.steps ? r.body(k + 1) : null, f, { dead: over && r.outcome === 'dead' ? 1 : 0 });
+      if (r.outcome !== 'na') drawSnake(ctx, B, r.body(k), k < r.steps ? r.body(k + 1) : null, f, { dead: over && r.outcome === 'dead' ? 1 : 0 });
       if (this.flashes[j] && r.outcome === 'won') drawFullFlash(ctx, B, (now - this.flashes[j]) / 0.9);
       card.className = `card ${over ? r.outcome : r.outcome === 'cycle' && this.s >= e ? 'cycle' : ''}`;
       const len = r.lens[k], rank = over && r.outcome === 'won' ? 1 + this.recs.filter(q => q.outcome === 'won' && q.steps < r.steps && this.s >= q.steps).length : 0;
-      $(`#rs${j}`).textContent = over ? (r.outcome === 'won' ? `第 ${rank} · ${r.steps} 步吃满` : r.outcome === 'dead' ? `撞死 · ${len} / ${r.cells}` : `${r.steps} 步`)
+      $(`#rs${j}`).textContent = over ? (r.outcome === 'won' ? `第 ${rank} · ${r.steps} 步吃满` : r.outcome === 'dead' ? `撞死 · ${len} / ${r.cells}` : r.outcome === 'na' ? '不适用' : `${r.steps} 步`)
         : r.outcome === 'cycle' && this.s >= e ? `绕圈 · ${len} / ${r.cells}` : `${Math.floor(Math.min(this.s, r.steps))} 步 · ${len} 格`;
     });
     $('#racestep').textContent = `第 ${Math.floor(this.s)} 步`;
@@ -262,8 +297,9 @@ function renderControls() {
   document.body.dataset.view = S.view;
   document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === S.view)));
   const sn = SNAKES.find(x => x.id === S.snake);
-  $('#name').textContent = sn.name; $('#en').textContent = sn.en; $('#line').textContent = sn.line;
-  document.querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === S.snake)));
+  $('#name').textContent = sn.name; $('#en').textContent = sn.en; $('#line').textContent = sn.full ? `${sn.full}：${sn.line}` : sn.line;
+  const [bw, bh] = dims();
+  document.querySelectorAll('.chip').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.id === S.snake)); b.classList.toggle('na', !supports(b.dataset.id, bw, bh, S.wrap)); });
   document.querySelectorAll('[data-size]').forEach(b => b.setAttribute('aria-pressed', String(!S.custom && +b.dataset.size === S.n)));
   $('#wrap').checked = S.wrap; $('#custom').checked = S.custom; $('#dims').hidden = !S.custom; $('#cw').value = S.cw; $('#ch').value = S.ch; $('#lines').checked = S.lines; $('#sound').setAttribute('aria-pressed', String(S.sound));
   $('#seed').value = S.view === 'race' ? S.raceSeed : S.seed;
@@ -311,7 +347,7 @@ function bind() {
     if (e.target.tagName === 'INPUT') return;
     if (e.key === ' ') { e.preventDefault(); togglePlay(); }
     else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { if (S.view !== 'single') return; e.preventDefault(); S.playing = false; Single.p = Math.max(0, Math.min(Single.rec.steps, Math.round(Single.p) + (e.key === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 10 : 1))); renderControls(); }
-    else if (e.key >= '1' && e.key <= '6' && S.view === 'single') { S.snake = SNAKES[+e.key - 1].id; restart(); }
+    else if (e.key >= '1' && e.key <= '9' && S.view === 'single') { S.snake = SNAKES[+e.key - 1].id; restart(); }
     else if (e.key === 'r' || e.key === 'R') $('#dice').click();
   });
 }
@@ -325,7 +361,7 @@ function step(t) {   // one frame at time t (ms)
 function frame(t) { step(t); requestAnimationFrame(frame); }
 window.__lab = { step, S, Single, Race };   // for testing the page headless (no animation frames there)
 function init() {
-  $('#chips').innerHTML = SNAKES.map((sn, j) => `<button class="chip" data-id="${sn.id}" aria-pressed="false"><b>${sn.name}</b><span>${['01', '02', '03', '04', '05', '06'][j]}</span></button>`).join('');
+  $('#chips').innerHTML = SNAKES.map((sn, j) => `<button class="chip" data-id="${sn.id}" aria-pressed="false"><b>${sn.name}</b><span>${String(j + 1).padStart(2, '0')}</span></button>`).join('');
   $('#sizes').innerHTML = SIZES.map(n => `<button data-size="${n}" aria-pressed="false">${n}×${n}</button>`).join('');
   bind(); restart(); requestAnimationFrame(frame);
 }

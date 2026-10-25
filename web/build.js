@@ -5,7 +5,7 @@
 //   node web/build.js
 const fs = require('fs'), path = require('path');
 const WEB = __dirname, OUT = path.join(WEB, 'dist', 'tuilu-lab.html');
-const ENGINE = ['snake.js', 'four-way.js', 'hybrid.js', 'bfs-handoff.js', 'adaptive.js', 'tiled-directed.js', 'simple-directed-graph.js', 'tiled-simple.js', 'c-directed.js'];
+const ENGINE = ['snake.js', 'four-way.js', 'hybrid.js', 'bfs-handoff.js', 'adaptive.js', 'tiled-directed.js', 'simple-directed-graph.js', 'tiled-simple.js', 'c-directed.js', 'rollout.js', 'reachability-guard.js', 'local-cycle.js', 'cell-tree.js'];
 const read = (...p) => fs.readFileSync(path.join(WEB, ...p), 'utf8');
 
 const engine = ENGINE.map(f => `// web/engine/${f}\n${read('engine', f).trim()}`).join('\n');
