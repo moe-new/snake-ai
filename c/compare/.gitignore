@@ -1,0 +1,4 @@
+build/
+snake-compare
+snake-compare.exe
+*.pdb

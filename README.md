@@ -42,7 +42,7 @@ cd c/terminal && make            # 在 macOS / Linux 上编译原版 C 程序
 | 目录 | 内容 |
 | --- | --- |
 | [`web/`](web/) | 实验台：`engine/` 是算法引擎（视频用的也是这一份），`lab/` 是页面，`dist/` 是打包好的单文件 |
-| [`c/`](c/) | `c-original.c` 是 2024 年的原版程序（Windows 控制台）；[`terminal/`](c/terminal/) 让它在 macOS / Linux 上跑，并提供不限速的录屏、计时版本 |
+| [`c/`](c/) | 原版 [`c-original.c`](c/c-original.c)；[`terminal/`](c/terminal/) 提供终端运行与录屏；[`compare/`](c/compare/) 包含九种 C 算法的说明、实测与对照程序 |
 | [`docs/`](docs/) | 六条蛇的说明，以及两份吃满证明 |
 
 视频本身由另一套 Node 渲染器画出，依赖配乐和素材，暂时没有放进这个仓库。
