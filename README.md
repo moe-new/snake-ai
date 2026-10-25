@@ -1,6 +1,6 @@
 # 退路：贪吃蛇怎样吃满每一格
 
-视频《退路》的配套代码：一个可以在浏览器里玩的实验台，2024 年写的那段原版 C 贪吃蛇，以及六条蛇各自怎么走的说明。
+视频《退路》的配套代码：一个可以在浏览器里玩的实验台，2024 年写的那段原版 C 贪吃蛇，九种算法的 C 对照程序，以及九条蛇各自怎么走的说明。
 
 - 视频：https://www.bilibili.com/video/BV1QTHA6DELc
 - 网页版（B 站 Toy）：https://www.bilibili.com/toy/d0nPeBW0gE6yXiPR
@@ -14,7 +14,7 @@
 
 ```sh
 open web/dist/tuilu-lab.html     # 实验台：离线单文件，直接用浏览器打开
-node web/check.js                # 重下视频里的对局，和片中数字逐项比对（约 3 秒）
+node web/check.js                # 重下视频里的对局，和片中数字逐项比对（约 2 秒）
 node web/build.js                # 改了网页代码后重新打包
 
 cd c/terminal && make            # 在 macOS / Linux 上编译原版 C 程序
@@ -24,7 +24,7 @@ cd c/terminal && make            # 在 macOS / Linux 上编译原版 C 程序
 
 网页部分只需要 Node，不装任何依赖；C 部分需要一个 C 编译器（clang / gcc，Windows 上用 MSVC）。
 
-## 六条蛇
+## 九条蛇
 
 | | 蛇 | 怎么走 | 8×8 上 100 局 |
 | --- | --- | --- | --- |
@@ -34,8 +34,11 @@ cd c/terminal && make            # 在 macOS / Linux 上编译原版 C 程序
 | 04 | 抄近路 | 沿着环线，能跳就跳，只要不越过尾巴 | 局局吃满，平均 674 步 |
 | 05 | 单行道 | 每格只开两个出口，找到路就敢吃（原版 C 的规则） | 局局吃满，平均 558 步 |
 | 06 | 步步为营 | 吃之前先画好退路图：吃完整条蛇躺在一条环线上 | 局局吃满，平均 536 步 |
+| 07 | 动态回路 | 沿环线走，但环线会改：换两处接口，让食物更近 | 局局吃满，平均 577 步 |
+| 08 | 可达保护 | 单行道的规则，吃之前多查一遍：吃完空地有没有被隔开 | 局局吃满，平均 483 步 |
+| 09 | 加权 Cell | 2×2 小格连成一棵树，只在树允许的方向上找最短路 | 局局吃满，平均 468.5 步 |
 
-每条蛇的规则、为什么会输、为什么能保证吃满，见 [docs/algorithms.md](docs/algorithms.md)。
+前六条是视频里的。后三条是 `c/compare` 里补的实验，全名分别是局部动态回路、BFS＋可达性保护、加权 Cell＋安全尾段裁剪；加权 Cell 移植自 [twanvl/snake](https://github.com/twanvl/snake)（MIT）。每条蛇的规则、为什么会输、能不能保证吃满，见 [docs/algorithms.md](docs/algorithms.md)。
 
 ## 目录
 
@@ -43,7 +46,7 @@ cd c/terminal && make            # 在 macOS / Linux 上编译原版 C 程序
 | --- | --- |
 | [`web/`](web/) | 实验台：`engine/` 是算法引擎（视频用的也是这一份），`lab/` 是页面，`dist/` 是打包好的单文件 |
 | [`c/`](c/) | 原版 [`c-original.c`](c/c-original.c)；[`terminal/`](c/terminal/) 提供终端运行与录屏；[`compare/`](c/compare/) 包含九种 C 算法的说明、实测与对照程序 |
-| [`docs/`](docs/) | 六条蛇的说明，以及两份吃满证明 |
+| [`docs/`](docs/) | 九条蛇的说明，以及两份吃满证明 |
 
 视频本身由另一套 Node 渲染器画出，依赖配乐和素材，暂时没有放进这个仓库。
 
