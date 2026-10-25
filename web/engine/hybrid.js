@@ -129,6 +129,9 @@
     if(strategy==='tiled-simple'){const simple=typeof module!=='undefined'&&module.exports?require('./tiled-simple.js'):root.TiledSimple;return new simple.SimpleTiledSnake(w,h,seed,wrap);}
     if(strategy==='tiled-directed'){const tiled=typeof module!=='undefined'&&module.exports?require('./tiled-directed.js'):root.TiledDirected;return new tiled.TiledDirectedSnake(w,h,seed,wrap);}
     if(strategy==='c-directed'){const c=typeof module!=='undefined'&&module.exports?require('./c-directed.js'):root.CDirected;return new c.CDirectedSnake(w,h,seed,wrap);}
+    if(strategy==='local-cycle'){const local=typeof module!=='undefined'&&module.exports?require('./local-cycle.js'):root.LocalCycle;return new local.LocalCycleSnake(w,h,seed,wrap);}
+    if(strategy==='reachability-guard'){const guard=typeof module!=='undefined'&&module.exports?require('./reachability-guard.js'):root.ReachabilityGuard;return new guard.GuardSnake(w,h,seed,wrap);}
+    if(strategy==='cell-tree'){const cell=typeof module!=='undefined'&&module.exports?require('./cell-tree.js'):root.CellTree;return new cell.CellTreeSnake(w,h,seed,wrap);}
     if(strategy==='adaptive'||strategy==='adaptive-ring'){const adaptive=typeof module!=='undefined'&&module.exports?require('./adaptive.js'):root.AdaptiveSnake;return new adaptive.AdaptiveSnake(w,h,seed,wrap,strategy==='adaptive');}
     if(['bfs-handoff','bfs-always','bfs-always-matched'].includes(strategy)){const handoff=typeof module!=='undefined'&&module.exports?require('./bfs-handoff.js'):root.BfsHandoff;return new handoff.BfsHandoffSnake(w,h,seed,wrap,strategy==='bfs-handoff'?options.switchAt??.65:1,strategy==='bfs-always-matched'?options.switchAt??.65:1);}
     return new HybridSnake(w,h,seed,wrap,strategy==='cycle'?0:.65,strategy!=='hybrid-greedy');
