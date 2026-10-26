@@ -129,9 +129,11 @@ const ROADS = new Set(['c-directed', 'tiled-directed', 'reachability-guard', 'ce
 
 // One game, recorded in slices so the page never stalls. The snake's path is kept as the
 // list of cells its head has been on (the body is always the last `len` of them).
+// why: false leaves out the explanation of each move (the race shows none, and it costs about as
+// much as the game itself).
 class Recording {
-  constructor(id, w, h, seed, wrap) {
-    this.id = id; this.w = w; this.h = h; this.cells = w * h; this.seed = seed; this.wrap = wrap;
+  constructor(id, w, h, seed, wrap, { why = true } = {}) {
+    this.id = id; this.w = w; this.h = h; this.cells = w * h; this.seed = seed; this.wrap = wrap; this.keepWhy = why;
     this.maxSteps = Math.max(60000, this.cells * this.cells);   // 循规蹈矩 needs about cells² / 2
     this.why = []; this.ate = []; this.outcome = null; this.loop = null; this.seen = new Map();
     if (!supports(id, w, h, wrap)) { this.outcome = 'na'; this.heads = [0, 1]; this.lens = [2]; this.foods = [-1]; this.roads = null; return; }
@@ -151,10 +153,11 @@ class Recording {
         const key = JSON.stringify([g.body, g.food, g.rng, g.mode, g.route, g.active ?? -1, g.stateKey ? g.stateKey() : null]);
         if (this.seen.has(key)) { this.outcome = 'cycle'; this.loop = { start: this.seen.get(key), length: g.steps - this.seen.get(key) }; break; }
         this.seen.set(key, g.steps);
-        const why = probe(this.id, g), len = g.body.length;
-        if (!g.tick() || g.dead) { this.why.push(why); this.outcome = g.food === -1 ? 'won' : 'dead'; this.crash = g.collision ?? -1; break; }
+        const why = this.keepWhy ? probe(this.id, g) : null, len = g.body.length;
+        if (!g.tick() || g.dead) { if (this.keepWhy) this.why.push(why); this.outcome = g.food === -1 ? 'won' : 'dead'; this.crash = g.collision ?? -1; break; }
         if (g.body.length !== len) this.seen.clear();
-        this.why.push(why); this.ate.push(g.body.length !== len);
+        if (this.keepWhy) this.why.push(why);
+        this.ate.push(g.body.length !== len);
         this.heads.push(g.body[0]); this.lens.push(g.body.length); this.foods.push(g.food);
       }
     }

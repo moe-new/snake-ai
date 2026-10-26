@@ -39,7 +39,11 @@ window.onerror = function (m, src, line, col) {
       <button class="step single-only" data-d="-1" aria-label="上一步">‹</button>
       <canvas id="scrub" class="single-only" aria-label="进度：拖动可以回到任意一步"></canvas>
       <button class="step single-only" data-d="1" aria-label="下一步">›</button>
-      <button class="speed" aria-label="速度">1×</button>
+      <div class="speedwrap">
+        <button class="speed" aria-label="速度" aria-haspopup="menu" aria-expanded="false">1×</button>
+        <div id="speedmenu" class="speedmenu" role="menu" aria-label="选速度" hidden></div>
+      </div>
+      <button id="finish" class="finish race-only">快速结束</button>
     </div>
     <div class="whybox single-only"><span id="step" class="num dim"></span><span id="why"></span></div>
     <ol id="results" class="race-only results"></ol>

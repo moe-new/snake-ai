@@ -61,6 +61,14 @@ body[data-view="single"] .race-only, body[data-view="race"] .single-only { displ
 .step { flex: none; width: 30px; height: 40px; border: 0; background: none; color: var(--dim); font-size: 26px; line-height: 1; }
 #scrub { flex: 1; min-width: 0; height: 40px; touch-action: none; cursor: pointer; }
 .speed { flex: none; min-width: 52px; height: 34px; border-radius: 999px; border: 1px solid var(--edge); background: rgba(255,255,255,0.04); font-size: 14px; font-variant-numeric: tabular-nums; }
+.speedwrap { position: relative; flex: none; }
+.speedmenu { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 5; display: grid; gap: 2px; min-width: 84px; padding: 5px; border-radius: 14px; border: 1px solid var(--edge);
+  background: rgba(22,25,37,0.96); box-shadow: 0 10px 28px rgba(0,0,0,0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.speedmenu[hidden] { display: none; }
+.speedmenu button { border: 0; background: none; padding: 7px 14px; border-radius: 10px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.speedmenu button[aria-checked="true"] { background: rgba(242,193,78,0.14); color: var(--gold); }
+.finish { flex: none; height: 34px; padding: 0 16px; border-radius: 999px; border: 1px solid rgba(242,193,78,0.45); background: rgba(242,193,78,0.06); color: var(--gold); font-size: 14px; }
+.finish:disabled { opacity: 0.4; cursor: default; }
 body[data-view="race"] .transport { justify-content: center; gap: 14px; }
 
 /* why */

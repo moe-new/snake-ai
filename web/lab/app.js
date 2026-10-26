@@ -3,7 +3,7 @@
 // step by step, with the lines that explain each move), or race all nine on the same opening.
 
 const $ = (s, el = document) => el.querySelector(s);
-const SPEEDS = [{ label: '慢', sps: 3 }, { label: '1×', sps: 8 }, { label: '4×', sps: 32 }, { label: '16×', sps: 128 }, { label: '64×', sps: 512 }];
+const SPEEDS = [{ label: '慢', sps: 3 }, { label: '1×', sps: 8 }, { label: '4×', sps: 32 }, { label: '16×', sps: 128 }, { label: '64×', sps: 512 }, { label: '256×', sps: 2048 }];
 const SIZES = [6, 8, 9, 10, 12, 16, 20, 30], SIDE = [3, 30];   // the presets, and the range of a custom side
 const MARGIN = 34;   // board units around the board: its rim and the gold flash
 // "{金} [红] <蓝>" → spans
@@ -242,28 +242,38 @@ function drawScrubber() {
 }
 
 // ---- the race: six snakes, one opening ------------------------------------------------------
+// finishing: 快速结束, every frame spent on working the games out (the one furthest behind first),
+// the boards following as far as all of them are known.
 const Race = {
-  recs: [], B: null, s: 0, flashes: {}, done: false,
+  recs: [], B: null, s: 0, flashes: {}, done: false, finishing: false,
   start() {
-    const [w, h] = dims(); this.recs = SNAKES.map(sn => new Recording(sn.id, w, h, S.raceSeed, S.wrap)); this.B = new Board(w, h, S.wrap);
-    this.s = 0; this.flashes = {}; this.done = false; S.playing = true;
+    const [w, h] = dims(); this.recs = SNAKES.map(sn => new Recording(sn.id, w, h, S.raceSeed, S.wrap, { why: false })); this.B = new Board(w, h, S.wrap);
+    this.s = 0; this.flashes = {}; this.done = false; this.finishing = false; S.playing = true;
     $('#racegrid').innerHTML = SNAKES.map((sn, j) => `<div class="card" data-j="${j}"><canvas></canvas><div class="name">${sn.name}</div><div class="status" id="rs${j}">0 步</div></div>`).join('');
     $('#results').innerHTML = '';
     renderControls();
   },
   endOf: r => (!r.outcome ? Infinity : r.outcome === 'cycle' ? r.loop.start : r.steps),
   tick(dt) {
-    for (const r of this.recs) if (!r.outcome) r.advance(3);
+    if (this.finishing) {
+      const t0 = performance.now();
+      while (performance.now() - t0 < 40) {
+        let r = null;
+        for (const q of this.recs) if (!q.outcome && (!r || q.steps < r.steps)) r = q;
+        if (!r) break;
+        r.advance(8);
+      }
+    } else for (const r of this.recs) if (!r.outcome) r.advance(3);
     if (!S.playing) return;
     const sps = SPEEDS[S.speed].sps, limit = Math.min(...this.recs.map(r => (r.outcome ? Infinity : r.steps - 1)));
     const before = this.s;
-    this.s = Math.min(limit, this.s + sps * dt);
+    this.s = this.finishing ? limit : Math.min(limit, this.s + sps * dt);
     this.recs.forEach((r, j) => {
       const e = this.endOf(r);
       if (before < e && this.s >= e && r.outcome !== 'cycle') { this.flashes[j] = performance.now() / 1000; if (r.outcome === 'won') Sound.full(); else if (r.outcome === 'dead') Sound.crash(); }
     });
     const last = Math.max(...this.recs.map(r => (r.outcome === 'won' || r.outcome === 'dead' || r.outcome === 'limit' || r.outcome === 'na' ? r.steps : r.outcome === 'cycle' ? r.loop.start : Infinity)));
-    if (this.s >= last && !this.done) { this.s = last; this.done = true; S.playing = false; this.results(); renderControls(); }
+    if (this.s >= last && !this.done) { this.s = last; this.done = true; this.finishing = false; S.playing = false; this.results(); renderControls(); }
   },
   results() {
     const rows = this.recs.map((r, j) => ({ j, r })), won = rows.filter(x => x.r.outcome === 'won').sort((a, b) => a.r.steps - b.r.steps), rest = rows.filter(x => x.r.outcome !== 'won');
@@ -288,7 +298,8 @@ const Race = {
       $(`#rs${j}`).textContent = over ? (r.outcome === 'won' ? `第 ${rank} · ${r.steps} 步吃满` : r.outcome === 'dead' ? `撞死 · ${len} / ${r.cells}` : r.outcome === 'na' ? '不适用' : `${r.steps} 步`)
         : r.outcome === 'cycle' && this.s >= e ? `绕圈 · ${len} / ${r.cells}` : `${Math.floor(Math.min(this.s, r.steps))} 步 · ${len} 格`;
     });
-    $('#racestep').textContent = `第 ${Math.floor(this.s)} 步`;
+    const left = this.recs.filter(r => !r.outcome).length;
+    $('#racestep').textContent = this.finishing && left ? `第 ${Math.floor(this.s)} 步 · 还有 ${left} 条在算` : `第 ${Math.floor(this.s)} 步`;
   },
 };
 
@@ -305,6 +316,8 @@ function renderControls() {
   $('#seed').value = S.view === 'race' ? S.raceSeed : S.seed;
   document.querySelectorAll('.play').forEach(b => { b.setAttribute('aria-label', S.playing ? '暂停' : '播放'); b.dataset.state = S.playing ? 'pause' : 'play'; });
   document.querySelectorAll('.speed').forEach(b => { b.textContent = SPEEDS[S.speed].label; });
+  document.querySelectorAll('[data-speed]').forEach(b => b.setAttribute('aria-checked', String(+b.dataset.speed === S.speed)));
+  const fin = $('#finish'); fin.disabled = Race.done || Race.finishing; fin.textContent = Race.finishing ? '计算中…' : '快速结束';
   $('#hint').innerHTML = S.view === 'single' ? rich(hintFor(S.snake, ...dims(), S.wrap)) : '';
 }
 const restart = () => { save(); (S.view === 'race' ? Race : Single).start(); };
@@ -330,11 +343,18 @@ function bind() {
     const m = S.view === 'race' ? Race : Single;
     if (!S.playing && S.view === 'single' && Single.ended) { Single.p = 0; Single.ended = false; Single.flash = 0; }
     if (!S.playing && S.view === 'race' && Race.done) { Race.s = 0; Race.done = false; Race.flashes = {}; $('#results').innerHTML = ''; }
-    S.playing = !S.playing; if (S.sound) Sound.on(); renderControls(); void m;
+    S.playing = !S.playing; if (!S.playing) Race.finishing = false;
+    if (S.sound) Sound.on(); renderControls(); void m;
   };
   document.querySelectorAll('.play').forEach(b => b.addEventListener('click', togglePlay));
   $('#board').addEventListener('click', togglePlay);
-  document.querySelectorAll('.speed').forEach(b => b.addEventListener('click', () => { S.speed = (S.speed + 1) % SPEEDS.length; save(); renderControls(); }));
+  // the speed: a button that opens the list of speeds
+  const menu = $('#speedmenu'), speedBtn = $('.speed'), openMenu = open => { menu.hidden = !open; speedBtn.setAttribute('aria-expanded', String(open)); };
+  speedBtn.addEventListener('click', e => { e.stopPropagation(); openMenu(menu.hidden); });
+  menu.addEventListener('click', e => { const b = e.target.closest('[data-speed]'); if (!b) return; e.stopPropagation(); S.speed = +b.dataset.speed; save(); openMenu(false); renderControls(); });
+  document.addEventListener('click', () => openMenu(false));
+  window.addEventListener('keydown', e => { if (e.key === 'Escape') openMenu(false); });
+  $('#finish').addEventListener('click', () => { if (Race.done) return; Race.finishing = true; S.playing = true; renderControls(); });
   document.querySelectorAll('.step').forEach(b => b.addEventListener('click', () => { S.playing = false; Single.p = Math.max(0, Math.min(Single.rec.steps, Math.round(Single.p) + +b.dataset.d)); renderControls(); }));
   // dragging the scrubber
   const scrub = $('#scrub');
@@ -363,6 +383,7 @@ window.__lab = { step, S, Single, Race };   // for testing the page headless (no
 function init() {
   $('#chips').innerHTML = SNAKES.map((sn, j) => `<button class="chip" data-id="${sn.id}" aria-pressed="false"><b>${sn.name}</b><span>${String(j + 1).padStart(2, '0')}</span></button>`).join('');
   $('#sizes').innerHTML = SIZES.map(n => `<button data-size="${n}" aria-pressed="false">${n}×${n}</button>`).join('');
+  $('#speedmenu').innerHTML = SPEEDS.map((sp, i) => `<button role="menuitemradio" data-speed="${i}" aria-checked="false">${sp.label}</button>`).join('');
   bind(); restart(); requestAnimationFrame(frame);
 }
 document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', init) : init();
